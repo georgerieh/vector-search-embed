@@ -186,15 +186,17 @@ def _get_dino():
     global _dino_model, _dino_preprocess
     if _dino_model is None:
         import torch
-        import timm.models.vision_transformer
+        import timm
         from torchvision import transforms
-        torch.serialization.add_safe_globals([timm.models.vision_transformer.VisionTransformer])
-        _dino_model = torch.load(
-            os.path.join(_DIR, 'dino_quantized.pt'),
-            map_location='cpu',
-            weights_only=False
-        )
-        _dino_model.eval()
+        torch.backends.quantized.engine = 'qnnpack'
+        print("loading quantized DINO...", flush=True)
+        model = timm.create_model('vit_base_patch16_224.dino', pretrained=False, num_classes=0)
+        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+        model.load_state_dict(torch.load(
+            os.path.join(_DIR, 'dino_quantized_state.pt'),
+            map_location='cpu', weights_only=True
+        ))
+        _dino_model = model.eval()
         _dino_preprocess = transforms.Compose([
             transforms.Resize(224),
             transforms.CenterCrop(224),
@@ -207,20 +209,17 @@ def _get_facenet_pytorch():
     global _facenet_model, _mtcnn
     if _facenet_model is None:
         import torch
-        import timm.models.vision_transformer
-        from torchvision import transforms
-        torch.serialization.add_safe_globals([timm.models.vision_transformer.VisionTransformer])
-        from facenet_pytorch import MTCNN
+        from facenet_pytorch import MTCNN, InceptionResnetV1
+        torch.backends.quantized.engine = 'qnnpack'
         _mtcnn = MTCNN(keep_all=True, device="cpu")
-        quantized_path = os.path.join(_DIR, 'facenet_quantized.pt')
-        if os.path.exists(quantized_path):
-            print("loading quantized FaceNet...", flush=True)
-            _facenet_model = torch.load(quantized_path, map_location='cpu', weights_only=False)
-        else:
-            print("loading FaceNet from pretrained...", flush=True)
-            from facenet_pytorch import InceptionResnetV1
-            _facenet_model = InceptionResnetV1(pretrained="vggface2").eval()
-        _facenet_model.eval()
+        print("loading quantized FaceNet...", flush=True)
+        model = InceptionResnetV1(pretrained=None, num_classes=512)
+        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
+        model.load_state_dict(torch.load(
+            os.path.join(_DIR, 'facenet_quantized_state.pt'),
+            map_location='cpu', weights_only=True
+        ))
+        _facenet_model = model.eval()
     return _facenet_model, _mtcnn
 
 def get_image_embedding(img: PILImage.Image) -> list:
