@@ -212,7 +212,8 @@ def get_image_embedding(img: PILImage.Image) -> list:
     img_resized = img.resize((224, 224))
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
     # no expand_dims — model expects (224, 224, 3) directly
-
+    interp.resize_tensor_input(inp['index'], arr.shape)
+    interp.allocate_tensors()
     interp.set_tensor(inp['index'], arr)
     interp.invoke()
     embedding = interp.get_tensor(out['index'])
@@ -237,7 +238,8 @@ def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | Non
         face = img.crop((x1, y1, x2, y2)).resize((112, 112))
         arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
         arr = np.expand_dims(arr, axis=0)
-
+        interp.resize_tensor_input(inp['index'], arr.shape)
+        interp.allocate_tensors()
         interp.set_tensor(inp['index'], arr)
         interp.invoke()
         vec = interp.get_tensor(out['index'])[0]
