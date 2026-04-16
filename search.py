@@ -5,7 +5,6 @@ import numpy as np
 from urllib.parse import unquote
 from PIL import Image as PILImage
 from facenet_pytorch import MTCNN
-from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
 
 DB_PATH = "/media/georgerieh/T7/photos.db"
 CHUNK_SIZE = 10_000
@@ -19,7 +18,7 @@ _facenet_interp = None
 def _get_mobilenet():
     global _mobilenet_interp
     if _mobilenet_interp is None:
-        
+        from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
         _mobilenet_interp = tflite_Interpreter(
             model_path=os.path.join(_DIR, "mobilenet_embedding.tflite")
         )
@@ -29,6 +28,7 @@ def _get_mobilenet():
 def _get_facenet():
     global _facenet_interp
     if _facenet_interp is None:
+        from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
         _facenet_interp = tflite_Interpreter(
             model_path=os.path.join(_DIR, "mobilefacenet.tflite")
         )
@@ -221,28 +221,60 @@ def get_image_embedding(img: PILImage.Image) -> list:
         embedding = embedding[0]
     return (embedding / np.linalg.norm(embedding)).tolist()
 
-def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | None:
+def get_face_embeddings(img: PILImage.Image, threshold=0.9) -> list | None:
+    import cv2
     interp = _get_facenet()
     inp = interp.get_input_details()[0]
     out = interp.get_output_details()[0]
 
-    boxes, probs = mtcnn.detect(img)
-    if boxes is None:
+    arr = np.array(img.convert("RGB"))
+    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+
+    # try DNN detector first (more accurate), fall back to Haar
+    dnn_prototxt = os.path.join(_DIR, "deploy.prototxt")
+    dnn_model = os.path.join(_DIR, "res10_300x300_ssd_iter_140000.caffemodel")
+
+    boxes = []
+    if os.path.exists(dnn_prototxt) and os.path.exists(dnn_model):
+        net = cv2.dnn.readNetFromCaffe(dnn_prototxt, dnn_model)
+        blob = cv2.dnn.blobFromImage(cv2.resize(arr, (300, 300)), 1.0, (300, 300), (104, 117, 123))
+        net.setInput(blob)
+        detections = net.forward()
+        h, w = arr.shape[:2]
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > threshold:
+                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                x1, y1, x2, y2 = box.astype(int)
+                boxes.append((x1, y1, x2, y2))
+    else:
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        detected = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        for (x, y, w, h) in detected:
+            boxes.append((x, y, x + w, y + h))
+
+    if not boxes:
         return None
 
     face_vecs = []
-    for box, prob in zip(boxes, probs):
-        if prob < threshold:
+    for (x1, y1, x2, y2) in boxes:
+        # clamp to image bounds
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(arr.shape[1], x2), min(arr.shape[0], y2)
+        if x2 <= x1 or y2 <= y1:
             continue
-        x1, y1, x2, y2 = [int(v) for v in box]
-        face = img.crop((x1, y1, x2, y2)).resize((112, 112))
-        arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
-        arr = np.expand_dims(arr, axis=0)
-        interp.resize_tensor_input(inp['index'], arr.shape)
+
+        face = PILImage.fromarray(arr[y1:y2, x1:x2]).resize((112, 112))
+        face_arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
+        face_arr = np.expand_dims(face_arr, axis=0)
+
+        interp.resize_tensor_input(inp['index'], face_arr.shape)
         interp.allocate_tensors()
-        interp.set_tensor(inp['index'], arr)
+        interp.set_tensor(inp['index'], face_arr)
         interp.invoke()
-        vec = interp.get_tensor(out['index'])[0]
+        vec = interp.get_tensor(out['index'])
+        if vec.ndim > 1:
+            vec = vec[0]
         face_vecs.append(vec / np.linalg.norm(vec))
 
     if not face_vecs:
@@ -254,18 +286,15 @@ def search_with_images(image, limit, start_date="", end_date="", use_dino_extrac
     facenet_features = None
 
     if use_dino_extract and image:
-        mtcnn = MTCNN(keep_all=True, device="cpu")
         img = PILImage.open(image).convert("RGB")
-
         dino_features = get_image_embedding(img)
-        facenet_features = get_face_embeddings(img, mtcnn)
+        facenet_features = get_face_embeddings(img)
 
     st = time.time()
     rows, stats = _search(dino_features, facenet_features, limit=limit,
-                        start_date=start_date, end_date=end_date)
+                          start_date=start_date, end_date=end_date)
     stats["generation_time"] = round(time.time() - st, 3)
     return rows, stats
-
 
 def return_file(search_parser, text, image, table, limit, start_date="", end_date=""):
     limit = limit or 50
