@@ -1,6 +1,8 @@
 import json
 import sqlite3
 import numpy as np
+from tqdm import tqdm
+import os
 
 DB_PATH = "/media/georgerieh/T7/photos.db"
 BASE_PATH = "/media/georgerieh/T7/photos_from_icloud"
@@ -87,75 +89,79 @@ def ingest():
     meta_file = open(f"{BASE_PATH_OUT}/metadata_sorted.jsonl")
     emb_file  = open(f"{BASE_PATH_OUT}/embeddings_sorted.jsonl")
 
+    total_lines = sum(1 for _ in open(f"{BASE_PATH_OUT}/metadata_sorted.jsonl"))
+
     meta_line = meta_file.readline()
     emb_line  = emb_file.readline()
 
-    while meta_line and emb_line:
-        mk = meta_key(meta_line)
-        ek = emb_key(emb_line)
+    with tqdm(total=total_lines, unit="photos") as pbar:
+        while meta_line and emb_line:
+            mk = meta_key(meta_line)
+            ek = emb_key(emb_line)
 
-        if mk == ek:
-            m   = json.loads(meta_line)
-            emb = json.loads(emb_line)
+            if mk == ek:
 
-            filename = f"{BASE_PATH}/{m[0]}"
-            path     = f"{MOUNT_PATH}/{m[0]}"
-            subfolder, file_id = m[2], m[1]
+                m   = json.loads(meta_line)
+                emb = json.loads(emb_line)
 
-            dino_raw = emb["dino_embedding"]
-            dino = normalize_vector(dino_raw if isinstance(dino_raw, list) else [0.0] * 768)
+                filename = f"{BASE_PATH}/{m[0]}"
+                path     = f"{MOUNT_PATH}/{m[0]}"
+                subfolder, file_id = m[2], m[1]
 
-            faces = []
-            for face in (emb.get("faces") or []):
-                if isinstance(face, dict):
-                    vec = face.get("embedding", [])
-                    if len(vec) == 512:
-                        faces.append(normalize_vector(vec).astype(np.float32).tobytes())
-                elif isinstance(face, list) and len(face) == 512:
-                    faces.append(normalize_vector(face).astype(np.float32).tobytes())
+                dino_raw = emb["dino_embedding"]
+                dino = normalize_vector(dino_raw if isinstance(dino_raw, list) else [0.0] * 768)
 
-            location = m[6]
-            if isinstance(location, dict):
-                location = json.dumps(location)
-            elif isinstance(location, str):
-                try:
-                    parsed = json.loads(location)
-                    location = json.dumps(parsed) if isinstance(parsed, dict) else location
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                faces = []
+                for face in (emb.get("faces") or []):
+                    if isinstance(face, dict):
+                        vec = face.get("embedding", [])
+                        if len(vec) == 512:
+                            faces.append(normalize_vector(vec).astype(np.float32).tobytes())
+                    elif isinstance(face, list) and len(face) == 512:
+                        faces.append(normalize_vector(face).astype(np.float32).tobytes())
 
-            batch.append({
-                "row": (
-                    filename,
-                    subfolder,
-                    str(m[3] or ""),
-                    int(m[4] or 0),
-                    int(m[5] or 0),
-                    location or "",
-                    str(m[7] or ""),
-                    float(m[8] or 0.0),
-                    float(m[9] or 0.0),
-                    path,
-                    dino.astype(np.float32).tobytes(),
-                ),
-                "faces": faces,
-            })
+                location = m[6]
+                if isinstance(location, dict):
+                    location = json.dumps(location)
+                elif isinstance(location, str):
+                    try:
+                        parsed = json.loads(location)
+                        location = json.dumps(parsed) if isinstance(parsed, dict) else location
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
-            if len(batch) >= BATCH_SIZE:
-                inserted_photos, inserted_faces = _flush(conn, batch, inserted_photos, inserted_faces)
-                print(f"Photos: {inserted_photos}, Faces: {inserted_faces}, Skipped: {skipped}")
-                batch = []
+                batch.append({
+                    "row": (
+                        filename,
+                        subfolder,
+                        str(m[3] or ""),
+                        int(m[4] or 0),
+                        int(m[5] or 0),
+                        location or "",
+                        str(m[7] or ""),
+                        float(m[8] or 0.0),
+                        float(m[9] or 0.0),
+                        path,
+                        dino.astype(np.float32).tobytes(),
+                    ),
+                    "faces": faces,
+                })
 
-            meta_line = meta_file.readline()
-            emb_line  = emb_file.readline()
+                if len(batch) >= BATCH_SIZE:
+                    inserted_photos, inserted_faces = _flush(conn, batch, inserted_photos, inserted_faces)
+                    pbar.set_postfix(inserted=inserted_photos, faces=inserted_faces, skipped=skipped)
+                    batch = []
 
-        elif mk < ek:
-            # metadata ahead — embedding missing for this photo
-            skipped += 1
-            meta_line = meta_file.readline()
-        else:
-            # embedding ahead — metadata missing
-            emb_line = emb_file.readline()
+                meta_line = meta_file.readline()
+                emb_line  = emb_file.readline()
+                pbar.update(1)
+
+            elif mk < ek:
+                skipped += 1
+                meta_line = meta_file.readline()
+                pbar.update(1)
+            else:
+                emb_line = emb_file.readline()
 
     meta_file.close()
     emb_file.close()
