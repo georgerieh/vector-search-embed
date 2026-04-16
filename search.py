@@ -42,7 +42,7 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_photo
         from collections import defaultdict
         photo_face_scores = defaultdict(lambda: float("inf"))
         for photo_id, blob in face_rows:
-            vec = _blob_to_vec(blob, 128)
+            vec = _blob_to_vec(blob, 512)
             if vec is not None:
                 score = float(np.linalg.norm(vec - facenet_q))
                 if score < photo_face_scores[photo_id]:
@@ -239,13 +239,26 @@ def get_face_embeddings(img: PILImage.Image, threshold=0.9):
     avg = np.mean(face_vecs, axis=0)
     return (avg / np.linalg.norm(avg)).tolist()
 def search_with_images(image, limit, start_date="", end_date="", use_dino_extract=True):
+    import gc
     dino_features = None
     facenet_features = None
 
     if use_dino_extract and image:
         img = PILImage.open(image).convert("RGB")
+        
+        # load DINO, run, then free
         dino_features = get_image_embedding(img)
+        global _dino_model, _dino_preprocess
+        _dino_model = None
+        _dino_preprocess = None
+        gc.collect()
+        
+        # now load FaceNet
         facenet_features = get_face_embeddings(img)
+        global _facenet_model, _mtcnn
+        _facenet_model = None
+        _mtcnn = None
+        gc.collect()
 
     st = time.time()
     rows, stats = _search(dino_features, facenet_features, limit=limit,
