@@ -193,7 +193,7 @@ def _get_dino():
         model = timm.create_model('vit_base_patch16_224.dino', pretrained=False, num_classes=0)
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
         model.load_state_dict(torch.load(
-            os.path.join(_DIR, 'dino_quantized_state.pt'),
+            os.path.join(_DIR, 'dino_quantized.pt'),
             map_location='cpu', weights_only=True
         ))
         _dino_model = model.eval()
@@ -216,7 +216,7 @@ def _get_facenet_pytorch():
         model = InceptionResnetV1(pretrained=None, num_classes=512)
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
         model.load_state_dict(torch.load(
-            os.path.join(_DIR, 'facenet_quantized_state.pt'),
+            os.path.join(_DIR, 'facenet_quantized.pt'),
             map_location='cpu', weights_only=True
         ))
         _facenet_model = model.eval()
