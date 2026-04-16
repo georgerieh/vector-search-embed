@@ -490,8 +490,8 @@
             </div>
             <script>
                 {%
-                    if images %
-                }
+                    if images 
+                %}
                 var clusters = L.markerClusterGroup({
                     spiderfyOnMaxZoom: true,
                     showCoverageOnHover: false,
@@ -519,7 +519,7 @@
                 clusters.addTo(map);
                 {%
                     endif %
-                }
+                %}
             </script>
         </div>
     </div>
