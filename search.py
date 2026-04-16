@@ -186,7 +186,9 @@ def _get_dino():
     global _dino_model, _dino_preprocess
     if _dino_model is None:
         import torch
+        import timm.models.vision_transformer
         from torchvision import transforms
+        torch.serialization.add_safe_globals([timm.models.vision_transformer.VisionTransformer])
         _dino_model = torch.load(
             os.path.join(_DIR, 'dino_quantized.pt'),
             map_location='cpu'
@@ -204,6 +206,9 @@ def _get_facenet_pytorch():
     global _facenet_model, _mtcnn
     if _facenet_model is None:
         import torch
+        import timm.models.vision_transformer
+        from torchvision import transforms
+        torch.serialization.add_safe_globals([timm.models.vision_transformer.VisionTransformer])
         from facenet_pytorch import MTCNN
         _mtcnn = MTCNN(keep_all=True, device="cpu")
         quantized_path = os.path.join(_DIR, 'facenet_quantized.pt')
