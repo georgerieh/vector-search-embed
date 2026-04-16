@@ -11,30 +11,6 @@ MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
-_mobilenet_interp = None
-_facenet_interp = None
-
-def _get_mobilenet():
-    global _mobilenet_interp
-    if _mobilenet_interp is None:
-        from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
-        _mobilenet_interp = tflite_Interpreter(
-            model_path=os.path.join(_DIR, "mobilenet_embedding.tflite")
-        )
-        _mobilenet_interp.allocate_tensors()
-    return _mobilenet_interp
-
-def _get_facenet():
-    global _facenet_interp
-    if _facenet_interp is None:
-        from ai_edge_litert.interpreter import Interpreter as tflite_Interpreter
-        _facenet_interp = tflite_Interpreter(
-            model_path=os.path.join(_DIR, "mobilefacenet.tflite")
-        )
-        _facenet_interp.allocate_tensors()
-    return _facenet_interp
-
-
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA query_only=ON")
@@ -201,82 +177,63 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
             params)
     conn.close()
     return results, {"query_time": round(time.time() - st, 3)}
+_dino_model = None
+_dino_preprocess = None
+_facenet_model = None
+_mtcnn = None
 
+def _get_dino():
+    global _dino_model, _dino_preprocess
+    if _dino_model is None:
+        import timm
+        import torch
+        from torchvision import transforms
+        _dino_model = timm.create_model("vit_base_patch16_224.dino", pretrained=True, num_classes=0)
+        _dino_model.eval()
+        _dino_preprocess = transforms.Compose([
+            transforms.Resize(224),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+    return _dino_model, _dino_preprocess
+
+def _get_facenet_pytorch():
+    global _facenet_model, _mtcnn
+    if _facenet_model is None:
+        from facenet_pytorch import InceptionResnetV1, MTCNN
+        _mtcnn = MTCNN(keep_all=True, device="cpu")
+        _facenet_model = InceptionResnetV1(pretrained="vggface2").eval()
+    return _facenet_model, _mtcnn
 
 def get_image_embedding(img: PILImage.Image) -> list:
-    interp = _get_mobilenet()
-    inp = interp.get_input_details()[0]
-    out = interp.get_output_details()[0]
-
-    img_resized = img.resize((224, 224))
-    arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
-    arr = np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
-
-    interp.resize_tensor_input(inp['index'], arr.shape)
-    interp.allocate_tensors()
-    interp.set_tensor(inp['index'], arr)
-    interp.invoke()
-    embedding = interp.get_tensor(out['index'])
-    if embedding.ndim > 1:
-        embedding = embedding[0]
+    import torch
+    model, preprocess = _get_dino()
+    with torch.no_grad():
+        tensor = preprocess(img).unsqueeze(0)
+        feats = model.forward_features(tensor)
+        if feats.ndim == 3:
+            feats = feats[:, 0, :]
+        embedding = feats.squeeze(0).numpy()
     return (embedding / np.linalg.norm(embedding)).tolist()
 
-def get_face_embeddings(img: PILImage.Image, threshold=0.9) -> list | None:
-    import cv2
-    interp = _get_facenet()
-    inp = interp.get_input_details()[0]
-    out = interp.get_output_details()[0]
-
-    arr = np.array(img.convert("RGB"))
-    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-
-    # try DNN detector first (more accurate), fall back to Haar
-    dnn_prototxt = os.path.join(_DIR, "deploy.prototxt")
-    dnn_model = os.path.join(_DIR, "res10_300x300_ssd_iter_140000.caffemodel")
-
-    boxes = []
-    if os.path.exists(dnn_prototxt) and os.path.exists(dnn_model):
-        net = cv2.dnn.readNetFromCaffe(dnn_prototxt, dnn_model)
-        blob = cv2.dnn.blobFromImage(cv2.resize(arr, (300, 300)), 1.0, (300, 300), (104, 117, 123))
-        net.setInput(blob)
-        detections = net.forward()
-        h, w = arr.shape[:2]
-        for i in range(detections.shape[2]):
-            confidence = detections[0, 0, i, 2]
-            if confidence > threshold:
-                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                x1, y1, x2, y2 = box.astype(int)
-                boxes.append((x1, y1, x2, y2))
-    else:
-        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        detected = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-        for (x, y, w, h) in detected:
-            boxes.append((x, y, x + w, y + h))
-
-    if not boxes:
+def get_face_embeddings(img: PILImage.Image, threshold=0.9):
+    import torch
+    model, mtcnn = _get_facenet_pytorch()
+    boxes, probs = mtcnn.detect(img)
+    if boxes is None:
         return None
-
+    faces = mtcnn(img)
+    if faces is None:
+        return None
     face_vecs = []
-    for (x1, y1, x2, y2) in boxes:
-        # clamp to image bounds
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(arr.shape[1], x2), min(arr.shape[0], y2)
-        if x2 <= x1 or y2 <= y1:
+    for face_tensor, prob in zip(faces, probs):
+        if prob is None or prob < threshold:
             continue
-
-        face = PILImage.fromarray(arr[y1:y2, x1:x2]).resize((112, 112))
-        face_arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
-        face_arr = np.expand_dims(face_arr, axis=0)
-
-        interp.resize_tensor_input(inp['index'], face_arr.shape)
-        interp.allocate_tensors()
-        interp.set_tensor(inp['index'], face_arr)
-        interp.invoke()
-        vec = interp.get_tensor(out['index'])
-        if vec.ndim > 1:
-            vec = vec[0]
+        with torch.no_grad():
+            feat = model(face_tensor.unsqueeze(0))
+        vec = feat[0].numpy()
         face_vecs.append(vec / np.linalg.norm(vec))
-
     if not face_vecs:
         return None
     avg = np.mean(face_vecs, axis=0)
