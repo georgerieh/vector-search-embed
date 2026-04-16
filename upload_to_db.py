@@ -49,7 +49,9 @@ def init_db(conn):
 def emb_key(line):
     """Extract relative path from embeddings line for comparison."""
     record = json.loads(line)
-    return record["filename"].replace(f"{MOUNT_PATH}/", "")
+    rel = record["filename"].replace(f"{MOUNT_PATH}/", "")
+    folder, filename = rel.split("/", 1)
+    return folder.replace(" ", "_") + "/" + filename
 
 def meta_key(line):
     """Extract relative path from metadata line for comparison."""
@@ -105,7 +107,7 @@ def ingest():
                 emb = json.loads(emb_line)
 
                 filename = f"{BASE_PATH}/{m[0]}"
-                path     = f"{MOUNT_PATH}/{m[0]}"
+                path = f"{BASE_PATH}/{m[0]}"
                 subfolder, file_id = m[2], m[1]
 
                 dino_raw = emb["dino_embedding"]
