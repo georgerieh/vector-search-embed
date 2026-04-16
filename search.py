@@ -196,8 +196,8 @@ def get_image_embedding(img: PILImage.Image) -> list:
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
     arr = np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
 
-    mobilenet_interp.resize_input_tensor(inp['index'], arr.shape)  # <-- add this
-    mobilenet_interp.allocate_tensors()                             # <-- and this
+    mobilenet_interp.resize_tensor_input(inp['index'], arr.shape)
+    mobilenet_interp.allocate_tensors()                  # <-- and this
 
     mobilenet_interp.set_tensor(inp['index'], arr)
     mobilenet_interp.invoke()
