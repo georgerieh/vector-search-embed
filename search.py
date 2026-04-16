@@ -5,6 +5,7 @@ import numpy as np
 from urllib.parse import unquote
 from PIL import Image as PILImage
 from facenet_pytorch import MTCNN
+import onnxruntime as ort
 
 DB_PATH = "/media/georgerieh/T7/photos.db"
 CHUNK_SIZE = 10_000
