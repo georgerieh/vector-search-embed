@@ -12,28 +12,26 @@ MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
-_mobilenet_interp = None
-_facenet_interp = None
+_mobilenet_sess = None
+_facenet_sess = None
 
 def _get_mobilenet():
-    global _mobilenet_interp
-    if _mobilenet_interp is None:
-        import tflite_runtime.interpreter as tflite
-        _mobilenet_interp = tflite.Interpreter(
-            model_path=os.path.join(_DIR, "mobilenet_embedding.tflite")
+    global _mobilenet_sess
+    if _mobilenet_sess is None:
+        _mobilenet_sess = ort.InferenceSession(
+            os.path.join(_DIR, "mobilenet_embedding.onnx"),
+            providers=["CPUExecutionProvider"]
         )
-        _mobilenet_interp.allocate_tensors()
-    return _mobilenet_interp
+    return _mobilenet_sess
 
 def _get_facenet():
-    global _facenet_interp
-    if _facenet_interp is None:
-        import tflite_runtime.interpreter as tflite
-        _facenet_interp = tflite.Interpreter(
-            model_path=os.path.join(_DIR, "mobilefacenet.tflite")
+    global _facenet_sess
+    if _facenet_sess is None:
+        _facenet_sess = ort.InferenceSession(
+            os.path.join(_DIR, "mobilefacenet.onnx"),
+            providers=["CPUExecutionProvider"]
         )
-        _facenet_interp.allocate_tensors()
-    return _facenet_interp
+    return _facenet_sess
 
 
 def get_conn():
@@ -203,45 +201,30 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
 
 
 def get_image_embedding(img: PILImage.Image) -> list:
-    interp = _get_mobilenet()
-    inp = interp.get_input_details()[0]
-    out = interp.get_output_details()[0]
-
+    sess = _get_mobilenet()
+    inp_name = sess.get_inputs()[0].name
     img_resized = img.resize((224, 224))
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
-    arr = np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
-
-    mobilenet_interp.resize_tensor_input(inp['index'], arr.shape)
-    mobilenet_interp.allocate_tensors()                  # <-- and this
-
-    mobilenet_interp.set_tensor(inp['index'], arr)
-    mobilenet_interp.invoke()
-    embedding = mobilenet_interp.get_tensor(out['index'])[0]
+    arr = np.expand_dims(arr, axis=0)
+    embedding = sess.run(None, {inp_name: arr})[0][0]
     return (embedding / np.linalg.norm(embedding)).tolist()
 
-def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | None:
-    interp = _get_facenet()
-    inp = interp.get_input_details()[0]
-    out = interp.get_output_details()[0]
-
+def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9):
+    sess = _get_facenet()
+    inp_name = sess.get_inputs()[0].name
     boxes, probs = mtcnn.detect(img)
     if boxes is None:
         return None
-
     face_vecs = []
     for box, prob in zip(boxes, probs):
         if prob < threshold:
             continue
         x1, y1, x2, y2 = [int(v) for v in box]
-        face = img.crop((x1, y1, x2, y2)).resize((112, 112))  # MobileFaceNet expects 112x112
+        face = img.crop((x1, y1, x2, y2)).resize((112, 112))
         arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
         arr = np.expand_dims(arr, axis=0)
-
-        facenet_interp.set_tensor(inp['index'], arr)
-        facenet_interp.invoke()
-        vec = facenet_interp.get_tensor(out['index'])[0]
+        vec = sess.run(None, {inp_name: arr})[0][0]
         face_vecs.append(vec / np.linalg.norm(vec))
-
     if not face_vecs:
         return None
     avg = np.mean(face_vecs, axis=0)
