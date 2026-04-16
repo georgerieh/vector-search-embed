@@ -185,10 +185,12 @@ _mtcnn = None
 def _get_dino():
     global _dino_model, _dino_preprocess
     if _dino_model is None:
-        import timm
         import torch
         from torchvision import transforms
-        _dino_model = timm.create_model("vit_base_patch16_224.dino", pretrained=True, num_classes=0)
+        _dino_model = torch.load(
+            os.path.join(_DIR, 'dino_quantized.pt'),
+            map_location='cpu'
+        )
         _dino_model.eval()
         _dino_preprocess = transforms.Compose([
             transforms.Resize(224),
@@ -201,9 +203,18 @@ def _get_dino():
 def _get_facenet_pytorch():
     global _facenet_model, _mtcnn
     if _facenet_model is None:
-        from facenet_pytorch import InceptionResnetV1, MTCNN
+        import torch
+        from facenet_pytorch import MTCNN
         _mtcnn = MTCNN(keep_all=True, device="cpu")
-        _facenet_model = InceptionResnetV1(pretrained="vggface2").eval()
+        quantized_path = os.path.join(_DIR, 'facenet_quantized.pt')
+        if os.path.exists(quantized_path):
+            print("loading quantized FaceNet...", flush=True)
+            _facenet_model = torch.load(quantized_path, map_location='cpu', weights_only=False)
+        else:
+            print("loading FaceNet from pretrained...", flush=True)
+            from facenet_pytorch import InceptionResnetV1
+            _facenet_model = InceptionResnetV1(pretrained="vggface2").eval()
+        _facenet_model.eval()
     return _facenet_model, _mtcnn
 
 def get_image_embedding(img: PILImage.Image) -> list:
