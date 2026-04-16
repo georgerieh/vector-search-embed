@@ -194,7 +194,7 @@ def _get_dino():
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
         model.load_state_dict(torch.load(
             os.path.join(_DIR, 'dino_quantized.pt'),
-            map_location='cpu', weights_only=True
+            map_location='cpu', weights_only=False
         ))
         _dino_model = model.eval()
         _dino_preprocess = transforms.Compose([
@@ -217,7 +217,7 @@ def _get_facenet_pytorch():
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
         model.load_state_dict(torch.load(
             os.path.join(_DIR, 'facenet_quantized.pt'),
-            map_location='cpu', weights_only=True
+            map_location='cpu', weights_only=False
         ))
         _facenet_model = model.eval()
     return _facenet_model, _mtcnn
