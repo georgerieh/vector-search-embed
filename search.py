@@ -211,12 +211,13 @@ def get_image_embedding(img: PILImage.Image) -> list:
 
     img_resized = img.resize((224, 224))
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
-    arr = np.expand_dims(arr, axis=0)
-
+    # no expand_dims — model expects (224, 224, 3) directly
 
     interp.set_tensor(inp['index'], arr)
     interp.invoke()
-    embedding = interp.get_tensor(out['index'])[0]
+    embedding = interp.get_tensor(out['index'])
+    if embedding.ndim > 1:
+        embedding = embedding[0]
     return (embedding / np.linalg.norm(embedding)).tolist()
 
 def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | None:
