@@ -3,11 +3,17 @@ import time
 import sqlite3
 import numpy as np
 from urllib.parse import unquote
-
+import tflite_runtime.interpreter as tflite
+from PIL import Image as PILImage
+from facenet_pytorch import MTCNN
 DB_PATH = "/media/georgerieh/T7/photos.db"
 CHUNK_SIZE = 10_000
 MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
+mobilenet_interp = tflite.Interpreter(model_path="mobilenet_embedding.tflite")
+mobilenet_interp.allocate_tensors()
 
+facenet_interp = tflite.Interpreter(model_path="mobilefacenet.tflite")
+facenet_interp.allocate_tensors()
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA query_only=ON")
@@ -172,57 +178,60 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
     )
     conn.close()
     return results, {"query_time": round(time.time() - st, 3)}
+def get_image_embedding(img: PILImage.Image) -> list:
+    inp = mobilenet_interp.get_input_details()[0]
+    out = mobilenet_interp.get_output_details()[0]
 
+    img_resized = img.resize((224, 224))
+    arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0  # MobileNet normalization
+    arr = np.expand_dims(arr, axis=0)
+
+    mobilenet_interp.set_tensor(inp['index'], arr)
+    mobilenet_interp.invoke()
+    embedding = mobilenet_interp.get_tensor(out['index'])[0]
+    return (embedding / np.linalg.norm(embedding)).tolist()
+
+def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | None:
+    inp = facenet_interp.get_input_details()[0]
+    out = facenet_interp.get_output_details()[0]
+
+    boxes, probs = mtcnn.detect(img)
+    if boxes is None:
+        return None
+
+    face_vecs = []
+    for box, prob in zip(boxes, probs):
+        if prob < threshold:
+            continue
+        x1, y1, x2, y2 = [int(v) for v in box]
+        face = img.crop((x1, y1, x2, y2)).resize((112, 112))  # MobileFaceNet expects 112x112
+        arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
+        arr = np.expand_dims(arr, axis=0)
+
+        facenet_interp.set_tensor(inp['index'], arr)
+        facenet_interp.invoke()
+        vec = facenet_interp.get_tensor(out['index'])[0]
+        face_vecs.append(vec / np.linalg.norm(vec))
+
+    if not face_vecs:
+        return None
+    avg = np.mean(face_vecs, axis=0)
+    return (avg / np.linalg.norm(avg)).tolist()
 
 def search_with_images(image, limit, start_date="", end_date="", use_dino_extract=True):
-    import torch
-    import timm
-    from PIL import Image as PILImage
-    from facenet_pytorch import InceptionResnetV1, MTCNN
-    from torchvision import transforms
-
-    device = torch.device("cpu")
     dino_features = None
     facenet_features = None
 
     if use_dino_extract and image:
-        dino_model = timm.create_model("vit_base_patch16_224.dino", pretrained=True, num_classes=0)
-        dino_model.eval().to(device)
-        mtcnn = MTCNN(keep_all=True, device=device)
-        facenet_model = InceptionResnetV1(pretrained="vggface2").eval().to(device)
-
-        preprocess = transforms.Compose([
-            transforms.Resize(224),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-        ])
-
+        mtcnn = MTCNN(keep_all=True, device="cpu")
         img = PILImage.open(image).convert("RGB")
 
-        with torch.no_grad():
-            feats = dino_model.forward_features(preprocess(img).unsqueeze(0).to(device))
-            if feats.ndim == 3:
-                feats = feats[:, 0, :]
-            dino_features = feats.squeeze(0).cpu().numpy().tolist()
-
-            boxes, probs = mtcnn.detect(img)
-            if boxes is not None:
-                faces = mtcnn.extract(img, boxes, save_path=None)
-                face_vecs = []
-                for face, prob in zip(faces, probs):
-                    if prob >= 0.9:
-                        feat = facenet_model(face.unsqueeze(0).to(device))
-                        face_vecs.append(feat[0].cpu().numpy())
-                if face_vecs:
-                    # average all detected faces in query image
-                    avg = np.mean(face_vecs, axis=0)
-                    avg = avg / np.linalg.norm(avg)
-                    facenet_features = avg.tolist()
+        dino_features = get_image_embedding(img)
+        facenet_features = get_face_embeddings(img, mtcnn)
 
     st = time.time()
     rows, stats = _search(dino_features, facenet_features, limit=limit,
-                          start_date=start_date, end_date=end_date)
+                        start_date=start_date, end_date=end_date)
     stats["generation_time"] = round(time.time() - st, 3)
     return rows, stats
 
