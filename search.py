@@ -3,25 +3,39 @@ import time
 import sqlite3
 import numpy as np
 from urllib.parse import unquote
-import tflite_runtime.interpreter as tflite
 from PIL import Image as PILImage
 from facenet_pytorch import MTCNN
+
 DB_PATH = "/media/georgerieh/T7/photos.db"
 CHUNK_SIZE = 10_000
 MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
-mobilenet_interp = tflite.Interpreter(model_path="mobilenet_embedding.tflite")
-mobilenet_interp.allocate_tensors()
 
-import os
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
-mobilenet_interp = tflite.Interpreter(
-    model_path=os.path.join(_DIR, "mobilenet_embedding.tflite")
-)
-facenet_interp = tflite.Interpreter(
-    model_path=os.path.join(_DIR, "mobilefacenet.tflite")
-)
-facenet_interp.allocate_tensors()
+_mobilenet_interp = None
+_facenet_interp = None
+
+def _get_mobilenet():
+    global _mobilenet_interp
+    if _mobilenet_interp is None:
+        import tflite_runtime.interpreter as tflite
+        _mobilenet_interp = tflite.Interpreter(
+            model_path=os.path.join(_DIR, "mobilenet_embedding.tflite")
+        )
+        _mobilenet_interp.allocate_tensors()
+    return _mobilenet_interp
+
+def _get_facenet():
+    global _facenet_interp
+    if _facenet_interp is None:
+        import tflite_runtime.interpreter as tflite
+        _facenet_interp = tflite.Interpreter(
+            model_path=os.path.join(_DIR, "mobilefacenet.tflite")
+        )
+        _facenet_interp.allocate_tensors()
+    return _facenet_interp
+
+
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA query_only=ON")
@@ -189,8 +203,9 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
 
 
 def get_image_embedding(img: PILImage.Image) -> list:
-    inp = mobilenet_interp.get_input_details()[0]
-    out = mobilenet_interp.get_output_details()[0]
+    interp = _get_mobilenet()
+    inp = interp.get_input_details()[0]
+    out = interp.get_output_details()[0]
 
     img_resized = img.resize((224, 224))
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
@@ -205,8 +220,9 @@ def get_image_embedding(img: PILImage.Image) -> list:
     return (embedding / np.linalg.norm(embedding)).tolist()
 
 def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | None:
-    inp = facenet_interp.get_input_details()[0]
-    out = facenet_interp.get_output_details()[0]
+    interp = _get_facenet()
+    inp = interp.get_input_details()[0]
+    out = interp.get_output_details()[0]
 
     boxes, probs = mtcnn.detect(img)
     if boxes is None:
