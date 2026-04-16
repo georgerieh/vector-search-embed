@@ -186,13 +186,18 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
     )
     conn.close()
     return results, {"query_time": round(time.time() - st, 3)}
+
+
 def get_image_embedding(img: PILImage.Image) -> list:
     inp = mobilenet_interp.get_input_details()[0]
     out = mobilenet_interp.get_output_details()[0]
 
     img_resized = img.resize((224, 224))
-    arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0  # MobileNet normalization
-    arr = np.expand_dims(arr, axis=0)
+    arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
+    arr = np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
+
+    mobilenet_interp.resize_input_tensor(inp['index'], arr.shape)  # <-- add this
+    mobilenet_interp.allocate_tensors()                             # <-- and this
 
     mobilenet_interp.set_tensor(inp['index'], arr)
     mobilenet_interp.invoke()
