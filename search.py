@@ -47,7 +47,7 @@ def _blob_to_vec(blob, dim):
         return np.frombuffer(blob, dtype=np.float32)
     return None
 
-def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=()):
+def _vector_search(conn, dino_query, facenet_query, where_clause="", where_photos="", where_params=()):
     dino_q = np.array(dino_query, dtype=np.float32)
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
     facenet_q = np.array(facenet_query, dtype=np.float32) if has_face_query else None
@@ -67,7 +67,7 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
         from collections import defaultdict
         photo_face_scores = defaultdict(lambda: float("inf"))
         for photo_id, blob in face_rows:
-            vec = _blob_to_vec(blob, 512)
+            vec = _blob_to_vec(blob, 128)
             if vec is not None:
                 score = float(np.linalg.norm(vec - facenet_q))
                 if score < photo_face_scores[photo_id]:
@@ -180,24 +180,26 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
 
-    # vector search with optional date pre-filter
     if start_date and end_date:
-        where = "WHERE p.date BETWEEN ? AND ?"
+        where = "WHERE p.date BETWEEN ? AND ?"   # for face SQL (has p alias)
+        where_photos = "WHERE date BETWEEN ? AND ?"  # for photos-only SQL
         params = (start_date, end_date)
     elif start_date:
         where = "WHERE p.date = ?"
+        where_photos = "WHERE date = ?"
         params = (start_date,)
     else:
         where = ""
+        where_photos = ""
         params = ()
 
     results = _vector_search(
-        conn,
-        dino_query or [0.0] * 768,
-        facenet_query,
-        where,
-        params,
-    )
+            conn, 
+            dino_query or [0.0] * 768, 
+            facenet_query, 
+            where, 
+            where_photos,
+            params)
     conn.close()
     return results, {"query_time": round(time.time() - st, 3)}
 
@@ -209,14 +211,12 @@ def get_image_embedding(img: PILImage.Image) -> list:
 
     img_resized = img.resize((224, 224))
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
-    arr = np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
+    arr = np.expand_dims(arr, axis=0)
 
-    mobilenet_interp.resize_tensor_input(inp['index'], arr.shape)
-    mobilenet_interp.allocate_tensors()                  # <-- and this
 
-    mobilenet_interp.set_tensor(inp['index'], arr)
-    mobilenet_interp.invoke()
-    embedding = mobilenet_interp.get_tensor(out['index'])[0]
+    interp.set_tensor(inp['index'], arr)
+    interp.invoke()
+    embedding = interp.get_tensor(out['index'])[0]
     return (embedding / np.linalg.norm(embedding)).tolist()
 
 def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | None:
@@ -233,20 +233,19 @@ def get_face_embeddings(img: PILImage.Image, mtcnn, threshold=0.9) -> list | Non
         if prob < threshold:
             continue
         x1, y1, x2, y2 = [int(v) for v in box]
-        face = img.crop((x1, y1, x2, y2)).resize((112, 112))  # MobileFaceNet expects 112x112
+        face = img.crop((x1, y1, x2, y2)).resize((112, 112))
         arr = np.array(face, dtype=np.float32) / 127.5 - 1.0
         arr = np.expand_dims(arr, axis=0)
 
-        facenet_interp.set_tensor(inp['index'], arr)
-        facenet_interp.invoke()
-        vec = facenet_interp.get_tensor(out['index'])[0]
+        interp.set_tensor(inp['index'], arr)
+        interp.invoke()
+        vec = interp.get_tensor(out['index'])[0]
         face_vecs.append(vec / np.linalg.norm(vec))
 
     if not face_vecs:
         return None
     avg = np.mean(face_vecs, axis=0)
     return (avg / np.linalg.norm(avg)).tolist()
-
 def search_with_images(image, limit, start_date="", end_date="", use_dino_extract=True):
     dino_features = None
     facenet_features = None
