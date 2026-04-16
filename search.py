@@ -12,7 +12,15 @@ MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
 mobilenet_interp = tflite.Interpreter(model_path="mobilenet_embedding.tflite")
 mobilenet_interp.allocate_tensors()
 
-facenet_interp = tflite.Interpreter(model_path="mobilefacenet.tflite")
+import os
+_DIR = os.path.dirname(os.path.abspath(__file__))
+
+mobilenet_interp = tflite.Interpreter(
+    model_path=os.path.join(_DIR, "mobilenet_embedding.tflite")
+)
+facenet_interp = tflite.Interpreter(
+    model_path=os.path.join(_DIR, "mobilefacenet.tflite")
+)
 facenet_interp.allocate_tensors()
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
