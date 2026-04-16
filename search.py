@@ -191,7 +191,8 @@ def _get_dino():
         torch.serialization.add_safe_globals([timm.models.vision_transformer.VisionTransformer])
         _dino_model = torch.load(
             os.path.join(_DIR, 'dino_quantized.pt'),
-            map_location='cpu'
+            map_location='cpu',
+            weights_only=False
         )
         _dino_model.eval()
         _dino_preprocess = transforms.Compose([
