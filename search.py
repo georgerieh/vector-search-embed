@@ -210,7 +210,8 @@ def get_image_embedding(img: PILImage.Image) -> list:
 
     img_resized = img.resize((224, 224))
     arr = np.array(img_resized, dtype=np.float32) / 127.5 - 1.0
-    # no expand_dims — model expects (224, 224, 3) directly
+    arr = np.expand_dims(arr, axis=0)  # (1, 224, 224, 3)
+
     interp.resize_tensor_input(inp['index'], arr.shape)
     interp.allocate_tensors()
     interp.set_tensor(inp['index'], arr)
