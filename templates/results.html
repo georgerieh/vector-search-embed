@@ -338,7 +338,7 @@
             const cell = document.createElement('div');
             cell.className = 'grid-cell';
             cell.innerHTML = `
-                <div class="grid-thumb" style="background-image:url('${thumbUrl}')">
+                <div class="grid-thumb" data-thumb="/thumbnail/${url}">
                     <div class="grid-overlay">
                         <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
                         <button class="thumb-btn thumb-delete" title="Delete">✕</button>
@@ -375,6 +375,19 @@
                 el.classList.add('appear');
             });
         });
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const thumb = entry.target;
+                    const url = thumb.dataset.thumb;
+                    if (url && !thumb.style.backgroundImage) {
+                        thumb.style.backgroundImage = `url('${url}')`;
+                    }
+                    observer.unobserve(thumb);
+                }
+    });
+}, { rootMargin: '100px' });
+        grid.querySelectorAll('.grid-thumb').forEach(el => observer.observe(el));
 
         document.getElementById('result-count').textContent = `${data.images.length} photos`;
         document.getElementById('toolbar-info').textContent = `${data.images.length} results`;
