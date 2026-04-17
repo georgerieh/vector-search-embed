@@ -134,63 +134,77 @@
     // --- submit handler ---
 
     document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
-            const fileInput = document.getElementById('image-in');
+        e.preventDefault();
 
-            if (fileInput.files.length === 0) return;
-            if (document.getElementById('embedding-input').value) return;
-
-            e.preventDefault();
+        const fileInput = document.getElementById('image-in');
+        const startDate = document.getElementById('start-date').value;
+        const endDate = document.getElementById('end-date').value;
+        const limit = document.getElementById('limit').value;
 
         document.getElementById('loading-container').style.display = 'block';
         loadingBar.style.width = '0%';
         btn.disabled = true;
 
-        const img = await loadImage(fileInput.files[0]);
+        let embedding = null;
+        let facenetEmbedding = null;
 
-        // DINO embedding
-        loadingText.textContent = 'Computing DINO embedding... 0%';
-        loadingBar.style.width = '20%';
-        const dinoTensor = preprocessDino(img);
-        const dinoResults = await dinoSession.run({ pixel_values: dinoTensor });
-        const dinoEmbedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
-        document.getElementById('embedding-input').value = JSON.stringify(dinoEmbedding);
-        loadingBar.style.width = '50%';
+        if (fileInput.files.length > 0) {
+            const img = await loadImage(fileInput.files[0]);
 
-        // face detection + FaceNet embedding
-        loadingText.textContent = 'Detecting faces... 50%';
-        const detection = faceDetector.detect(img);
-        let faceEmbedding = null;
+            loadingText.textContent = 'Computing DINO embedding... 20%';
+            loadingBar.style.width = '20%';
+            const dinoTensor = preprocessDino(img);
+            const dinoResults = await dinoSession.run({ pixel_values: dinoTensor });
+            embedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
+            loadingBar.style.width = '50%';
 
-        if (detection.detections.length > 0) {
-            loadingText.textContent = 'Computing face embedding... 60%';
-            loadingBar.style.width = '60%';
+            loadingText.textContent = 'Detecting faces... 50%';
+            const detection = faceDetector.detect(img);
 
-            // use highest confidence detection
-            const best = detection.detections.reduce((a, b) =>
-                a.categories[0].score > b.categories[0].score ? a : b
-            );
-            const box = best.boundingBox;
+            if (detection.detections.length > 0) {
+                loadingText.textContent = 'Computing face embedding... 60%';
+                loadingBar.style.width = '60%';
+                const best = detection.detections.reduce((a, b) =>
+                    a.categories[0].score > b.categories[0].score ? a : b
+                );
+                const faceTensor = preprocessFace(img, best.boundingBox, img.width, img.height);
+                const faceResults = await faceNetSession.run({ input: faceTensor });
+                facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
+            }
 
-            const faceTensor = preprocessFace(img, box, img.width, img.height);
-            const faceResults = await faceNetSession.run({ input: faceTensor });
-            faceEmbedding = normalize(Array.from(faceResults.embedding.data));
+            loadingBar.style.width = '90%';
+            loadingText.textContent = facenetEmbedding ? 'Face found ✓ Searching...' : 'No face — DINO only. Searching...';
+            URL.revokeObjectURL(img.src);
         }
 
-        document.getElementById('facenet-input').value = faceEmbedding ? JSON.stringify(faceEmbedding) : '';
-        loadingBar.style.width = '100%';
-        loadingText.textContent = faceEmbedding ? 'Face found ✓ Done!' : 'No face detected — DINO only';
+        // fetch is outside the if block — runs for date-only queries too
+        const resp = await fetch('/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding, start_date: startDate, end_date: endDate, limit }),
+        });
+        const data = await resp.json();
 
-        URL.revokeObjectURL(img.src);
-        e.target.submit();
+        loadingBar.style.width = '100%';
+        loadingText.textContent = `Done — ${data.images.length} results`;
+        setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 1000);
+
+        btn.disabled = false;
+        renderResults(data);
     });
+    function renderResults(data) {
+        const gallery = document.querySelector('.gallery');
+        gallery.innerHTML = '';
+        data.images.forEach((img, i) => {
+            const div = document.createElement('div');
+            div.className = 'photo' + (i === 0 ? ' active' : i === 1 ? ' next' : i === 2 ? ' next2' : '');
+            div.style.backgroundImage = `url('/files/${img.url}')`;
+            gallery.appendChild(div);
+        });
+        // re-init gallery controls and map markers
+    }
 </script>
-    <!--	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"-->
-    <!--		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />-->
-    <!--	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"-->
-    <!--		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>-->
-    <!--	<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>-->
-    <!--	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>-->
-    <!--    <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>-->
+
 	<script src='https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/Leaflet.fullscreen.min.js'></script>
 	<link href='https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/leaflet.fullscreen.css'
 		rel='stylesheet' />
@@ -563,8 +577,6 @@
     
 				<form name="input" action="/" method="post" enctype="multipart/form-data">
                     <input accept="image/*" id="image-in" name="image" type="file"><br><br>
-                    <input type="hidden" id="embedding-input" name="embedding">
-                    <input type="hidden" id="facenet-input" name="facenet_embedding">
 
                     <label for="start-date">Start Date:</label>
                     <input id="start-date" name="start_date" type="date"><br><br>
