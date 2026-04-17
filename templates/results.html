@@ -203,13 +203,18 @@
         catch { return []; }
     }
     function toggleFavorite(url) {
-        let favs = getFavorites();
-        if (favs.includes(url)) favs = favs.filter(u => u !== url);
-        else favs.push(url);
-        localStorage.setItem('mem_favorites', JSON.stringify(favs));
-        renderFavStrip();
-        return favs.includes(url);
-    }
+    // strip any leading base path so only relative path is stored
+    const BASE = 'media/georgerieh/T7/photos_from_icloud/';
+    let cleanUrl = url.replace(/^\//, '');  // strip leading slash
+    if (cleanUrl.startsWith(BASE)) cleanUrl = cleanUrl.slice(BASE.length);
+    
+    let favs = getFavorites();
+    if (favs.includes(cleanUrl)) favs = favs.filter(u => u !== cleanUrl);
+    else favs.push(cleanUrl);
+    localStorage.setItem('mem_favorites', JSON.stringify(favs));
+    renderFavStrip();
+    return favs.includes(cleanUrl);
+}
     window.toggleFavorite = toggleFavorite;
     window.getFavorites = getFavorites;
 
@@ -1527,6 +1532,17 @@ function checkAndLoadMemory() {
 }
 
 checkAndLoadMemory();
+window.renderFavStrip = renderFavStrip;
+window.addEventListener('storage', e => {
+    if (e.key === 'mem_favorites') window.renderFavStrip();
+});
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.renderFavStrip) window.renderFavStrip();
+    else {
+        // module might not be ready yet, retry
+        setTimeout(() => window.renderFavStrip?.(), 1000);
+    }
+});
 </script>
 </body>
 </html>
