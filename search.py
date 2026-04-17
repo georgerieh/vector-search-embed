@@ -123,7 +123,9 @@ def _score_dino_rows(rows, dino_q, face_scores):
 def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
     conn = get_conn()
     st = time.time()
-
+    if not dino_query and not start_date:
+        conn.close()
+        return [], {"query_time": round(time.time() - st, 3)}
     # date-only, no vectors
     if start_date and not dino_query:
         if end_date:
@@ -259,7 +261,7 @@ def search_with_images(image, limit,embedding, start_date="", end_date="", ):
     #     img = PILImage.open(image).convert("RGB")
         
     #     # load DINO, run, then free
-    dino_features = get_image_embedding(embedding) #fix
+    dino_features = get_image_embedding(embedding) if embedding is not None else None #fix
     #     global _dino_model, _dino_preprocess
     #     _dino_model = None
     #     _dino_preprocess = None
