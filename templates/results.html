@@ -918,14 +918,28 @@
         <div class="toolbar-info" id="toolbar-info"></div>
     </div>
     <div class="content-split" id="results-area">
-        <div class="grid-pane">
-            <div id="photo-grid"></div>
-        </div>
+        <div class="grid-pane"><div id="photo-grid"></div></div>
         <div class="map-pane">
             <div class="resize-handle" id="resize-handle"></div>
             <div id="map"></div>
         </div>
-        <div id="memory-pane" style="display:none; flex:1; overflow-y:auto; background:#f2f2f7;">
+    </div>
+        <div id="empty-state">
+        <div class="empty-icon"></div>
+        <div class="empty-text">Find your memories</div>
+        <div class="empty-sub">Search by photo similarity or date range</div>
+    </div>
+
+    <div class="gallery-pane" id="gallery-pane">
+        <div class="gallery-main" id="gallery-main">
+            <div class="gallery-controls">
+                <button class="gallery-btn" id="gallery-prev">← Prev</button>
+                <button class="gallery-btn" id="gallery-next">Next →</button>
+            </div>
+        </div>
+        <div class="gallery-strip" id="gallery-strip"></div>
+    </div>
+    <div id="memory-pane" style="display:none; flex:1; overflow-y:auto; background:#f2f2f7;">
 
     <div id="memory-loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#8e8e93; gap:12px;">
         <div class="spinner"></div>
@@ -1005,7 +1019,7 @@
         </div>
     </div>
 </div>
-        <div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7;">
+<div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7;">
             <div id="info-tab">
     <div class="info-header">
         <span class="info-title">Your Library</span>
@@ -1062,118 +1076,74 @@
  
 <script>
 const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
- 
-async function loadStats() {
-    const resp = await fetch('/stats');
-    const data = await resp.json();
- 
-    document.getElementById('info-loading').style.display = 'none';
-    document.getElementById('info-content').style.display = 'block';
-    document.getElementById('total-badge').textContent = data.total.toLocaleString() + ' photos';
- 
-    renderMonthChart(data.by_month);
-    renderDowChart(data.by_dow);
-    renderMiniTable('top-cities-table', data.top_cities, 'top');
-    renderMiniTable('top-countries-table', data.top_countries, 'top');
-    renderMiniTable('bottom-cities-table', data.bottom_cities, 'bottom');
-    renderMiniTable('bottom-countries-table', data.bottom_countries, 'bottom');
-}
- 
-function renderMonthChart(byMonth) {
-    const el = document.getElementById('month-chart');
-    if (!byMonth.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
- 
-    const max = Math.max(...byMonth.map(d => d.count));
- 
-    byMonth.forEach(d => {
-        const pct = Math.round((d.count / max) * 100);
-        const [year, month] = d.month.split('-');
-        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const label = monthNames[parseInt(month) - 1] + ' ' + year.slice(2);
- 
-        const col = document.createElement('div');
-        col.className = 'bar-col';
-        col.innerHTML = `
-            <div class="bar" style="height:${Math.max(pct, 1)}%">
-                <div class="bar-tooltip">${label}: ${d.count.toLocaleString()}</div>
-            </div>
-            <div class="bar-label">${label}</div>
-        `;
-        el.appendChild(col);
-    });
-}
- 
-function renderDowChart(byDow) {
-    const el = document.getElementById('dow-chart');
-    if (!byDow.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
- 
-    // fill missing days with 0
-    const counts = Array(7).fill(0);
-    byDow.forEach(d => { counts[d.dow] = d.count; });
-    const max = Math.max(...counts);
- 
-    counts.forEach((count, dow) => {
-        const pct = max > 0 ? Math.round((count / max) * 100) : 0;
-        const row = document.createElement('div');
-        row.className = 'dow-row';
-        row.innerHTML = `
-            <div class="dow-label">${DOW_NAMES[dow]}</div>
-            <div class="dow-track">
-                <div class="dow-bar" style="width:${pct}%"></div>
-            </div>
-            <div class="dow-count">${count.toLocaleString()}</div>
-        `;
-        el.appendChild(row);
-    });
- 
-    // animate bars in after paint
-    requestAnimationFrame(() => {
-        el.querySelectorAll('.dow-bar').forEach(bar => {
-            bar.style.transition = 'width 0.7s cubic-bezier(0.34, 1.2, 0.64, 1)';
-        });
-    });
-}
- 
-function renderMiniTable(id, rows, type) {
-    const table = document.getElementById(id);
-    if (!rows.length) {
-        table.innerHTML = '<tr><td style="color:#8e8e93;font-size:12px">No data</td></tr>';
-        return;
-    }
-    rows.forEach((row, i) => {
-        const tr = document.createElement('tr');
-        const pillClass = type === 'top' ? `rank-${i+1}` : 'bottom-pill';
-        tr.innerHTML = `
-            <td>
-                <span class="rank-pill ${pillClass}">${i+1}</span>
-                ${row.name}
-            </td>
-            <td>${row.count.toLocaleString()}</td>
-        `;
-        table.appendChild(tr);
-    });
-}
- 
-loadStats();
-</script>
-    </div>
-    
-    <div id="empty-state">
-        <div class="empty-icon"></div>
-        <div class="empty-text">Find your memories</div>
-        <div class="empty-sub">Search by photo similarity or date range</div>
-    </div>
 
-    <div class="gallery-pane" id="gallery-pane">
-        <div class="gallery-main" id="gallery-main">
-            <div class="gallery-controls">
-                <button class="gallery-btn" id="gallery-prev">← Prev</button>
-                <button class="gallery-btn" id="gallery-next">Next →</button>
-            </div>
-        </div>
-        <div class="gallery-strip" id="gallery-strip"></div>
-    </div>
-</div>
+async function loadStats() {
+        document.getElementById('info-loading').style.display = 'flex';
+        document.getElementById('info-content').style.display = 'none';
+        const data = window._statsData || await fetch('/stats').then(r => r.json());
+        window._statsData = data;
+        document.getElementById('info-loading').style.display = 'none';
+        document.getElementById('info-content').style.display = 'block';
+        document.getElementById('total-badge').textContent = data.total.toLocaleString() + ' photos';
+        renderMonthChart(data.by_month);
+        renderDowChart(data.by_dow);
+        renderMiniTable('top-cities-table', data.top_cities, 'top');
+        renderMiniTable('top-countries-table', data.top_countries, 'top');
+        renderMiniTable('bottom-cities-table', data.bottom_cities, 'bottom');
+        renderMiniTable('bottom-countries-table', data.bottom_countries, 'bottom');
+    }
+
+    function renderMonthChart(byMonth) {
+        const el = document.getElementById('month-chart');
+        if (!byMonth.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
+        const max = Math.max(...byMonth.map(d => d.count));
+        byMonth.forEach(d => {
+            const pct = Math.round((d.count / max) * 100);
+            const [year, month] = d.month.split('-');
+            const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const label = names[parseInt(month)-1] + ' ' + year.slice(2);
+            const col = document.createElement('div');
+            col.className = 'bar-col';
+            col.innerHTML = `<div class="bar" style="height:${Math.max(pct,1)}%"><div class="bar-tooltip">${label}: ${d.count.toLocaleString()}</div></div><div class="bar-label">${label}</div>`;
+            el.appendChild(col);
+        });
+    }
+
+    function renderDowChart(byDow) {
+        const el = document.getElementById('dow-chart');
+        if (!byDow.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
+        const counts = Array(7).fill(0);
+        byDow.forEach(d => { counts[d.dow] = d.count; });
+        const max = Math.max(...counts);
+        counts.forEach((count, dow) => {
+            const pct = max > 0 ? Math.round((count/max)*100) : 0;
+            const row = document.createElement('div');
+            row.className = 'dow-row';
+            row.innerHTML = `<div class="dow-label">${DOW_NAMES[dow]}</div><div class="dow-track"><div class="dow-bar" style="width:${pct}%"></div></div><div class="dow-count">${count.toLocaleString()}</div>`;
+            el.appendChild(row);
+        });
+    }
+
+    function renderMiniTable(id, rows, type) {
+        const table = document.getElementById(id);
+        if (!rows.length) { table.innerHTML = '<tr><td style="color:#8e8e93;font-size:12px">No data</td></tr>'; return; }
+        rows.forEach((row, i) => {
+            const tr = document.createElement('tr');
+            const pillClass = type === 'top' ? `rank-${i+1}` : 'bottom-pill';
+            tr.innerHTML = `<td><span class="rank-pill ${pillClass}">${i+1}</span>${row.name}</td><td>${row.count.toLocaleString()}</td>`;
+            table.appendChild(tr);
+        });
+    }
+
+    // preload silently after 2s
+    setTimeout(() => {
+        fetch('/stats').then(r => r.json()).then(data => { window._statsData = data; }).catch(() => {});
+    }, 2000);
+    </script>
+
+</div> <!-- end info-pane -->
+    
+
 
 <!-- LIGHTBOX -->
 <div id="lightbox">
@@ -1204,15 +1174,19 @@ window.currentView = 'grid';
 
 function setView(view) {
     window.currentView = view;
-    ['grid','gallery','info','memory'].forEach(v => 
+    ['grid','gallery','info','memory'].forEach(v =>
         document.getElementById(`btn-${v}`)?.classList.toggle('active', v === view)
     );
-    document.getElementById('results-area').style.display = view === 'grid' ? 'grid' : 'none';
-    document.getElementById('gallery-pane').classList.toggle('active', view === 'gallery');
-    document.getElementById('info-pane').style.display = view === 'info' ? 'block' : 'none';
-    document.getElementById('memory-pane').style.display = view === 'memory' ? 'flex' : 'none';
 
-    if (view === 'gallery' && window.currentImages.length > 0) buildGallery(window.currentImages, 0);
+    const hasResults = window.currentImages.length > 0;
+
+    document.getElementById('results-area').style.display  = view === 'grid' && hasResults ? 'flex' : 'none';
+    document.getElementById('empty-state').style.display = view === 'grid' && !hasResults ? 'flex' : 'none';
+    document.getElementById('gallery-pane').classList.toggle('active', view === 'gallery');
+    document.getElementById('info-pane').style.display     = view === 'info' ? 'flex' : 'none';
+    document.getElementById('memory-pane').style.display   = view === 'memory' ? 'flex' : 'none';
+
+    if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 0);
     if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
     if (view === 'memory' && !currentMemory) loadMemory();
 }
@@ -1349,6 +1323,13 @@ function renderSavedCollections() {
 }
 
 async function loadMemory() {
+    if (!window.openLightbox) {
+        await new Promise(resolve => {
+            const check = setInterval(() => {
+                if (window.openLightbox) { clearInterval(check); resolve(); }
+            }, 100);
+        });
+    }
     document.getElementById('memory-loading').style.display = 'flex';
     document.getElementById('memory-content').style.display = 'none';
 
