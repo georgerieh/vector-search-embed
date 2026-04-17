@@ -134,17 +134,21 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
     conn = get_conn()
     st = time.time()
 
-    # build WHERE clause dynamically
+    has_filters = any([start_date, country, city, h3cell])
+
+    if not dino_query and not has_filters:
+        conn.close()
+        return [], {"query_time": round(time.time() - st, 3)}
+
+    # build WHERE
     conditions = []
     params = []
-
     if start_date and end_date:
         conditions.append("date BETWEEN ? AND ?")
         params.extend([start_date, end_date])
     elif start_date:
         conditions.append("date = ?")
         params.append(start_date)
-
     if country:
         conditions.append("country = ?")
         params.append(country)
@@ -152,33 +156,34 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conditions.append("city = ?")
         params.append(city)
     if h3cell:
-        # match photos whose lat/lon falls in this h3 cell — store h3 cell in DB or compute on the fly
-        # simplest: add h3_cell column and filter on it
         conditions.append("h3_cell = ?")
         params.append(h3cell)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     where_params = tuple(params)
 
-    if not dino_query and not conditions:
-        conn.close()
-        return [], {"query_time": round(time.time() - st, 3)}
-
-    if not dino_query and conditions:
+    if not dino_query:
         # filter-only, no vector search
-        sql = f"SELECT path, location, lat, lon FROM photos {where} ORDER BY date LIMIT ?"
+        sql = f"""
+            SELECT path, location, lat, lon 
+            FROM photos {where} 
+            ORDER BY date DESC LIMIT ?
+        """
         rows = conn.execute(sql, where_params + (limit,)).fetchall()
-        # ... format and return same as date-only path
         results = []
         for path, location, lat, lon in rows:
             results.append({
                 "location": location,
                 "url": unquote(path).replace(f"{MOUNT_PATH}/", ""),
-                "score": 0.0, "lat": lat, "lon": lon, "timestamp": 0,
+                "score": 0.0,
+                "lat": lat,
+                "lon": lon,
+                "timestamp": 0,
             })
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
 
+    # vector search with optional filters
     results = _vector_search(conn, dino_query, facenet_query, where, where_params)
     conn.close()
     return results, {"query_time": round(time.time() - st, 3)}
