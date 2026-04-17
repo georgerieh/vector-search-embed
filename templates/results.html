@@ -8,6 +8,7 @@
     <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet"/>
     <link href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" rel="stylesheet"/>
     <link href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" rel="stylesheet"/>
+    <script src="https://unpkg.com/h3-js@4/dist/h3-js.umd.js"></script>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
@@ -231,9 +232,44 @@
         leafletMap = L.map('map').setView([48.505, 2.33], 3);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(leafletMap);
     }
+    let hexLayer = null;
+
+        function updateHexLayer() {
+            if (!leafletMap) return;
+            const zoom = leafletMap.getZoom();
+            // map zoom to h3 resolution
+            const res = zoom < 4 ? 3 : zoom < 6 ? 4 : zoom < 8 ? 5 : zoom < 10 ? 6 : 7;
+
+            fetch(`/hex_coverage?resolution=${res}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (hexLayer) leafletMap.removeLayer(hexLayer);
+                    const layers = [];
+                    data.cells.forEach(cell => {
+                        const boundary = h3.cellToBoundary(cell.h3).map(([lat, lng]) => [lat, lng]);
+                        const poly = L.polygon(boundary, {
+                            color: '#007aff',
+                            fillColor: '#007aff',
+                            fillOpacity: 0.08,
+                            weight: 1,
+                            opacity: 0.4,
+                        });
+                        poly.bindTooltip(`${cell.count} photos`, { sticky: true });
+                        poly.on('click', () => {
+                            navigator.clipboard.writeText(cell.h3);
+                            poly.setStyle({ fillOpacity: 0.25 });
+                            setTimeout(() => poly.setStyle({ fillOpacity: 0.08 }), 600);
+                        });
+                        layers.push(poly);
+                    });
+                    hexLayer = L.layerGroup(layers).addTo(leafletMap);
+                });
+        }
 
     function updateMap(images) {
         initMap();
+        leafletMap.on('zoomend moveend', updateHexLayer);
+        updateHexLayer();
         if (markerClusters) leafletMap.removeLayer(markerClusters);
         markerClusters = L.markerClusterGroup({ spiderfyOnMaxZoom: true, showCoverageOnHover: false });
         const bounds = [];
@@ -386,7 +422,42 @@
             letter-spacing: -0.6px;
             margin-bottom: 16px;
         }
-
+        .info-header { margin-bottom: 24px; }
+.info-title { font-size: 28px; font-weight: 700; letter-spacing: -0.7px; }
+.info-subtitle { font-size: 14px; color: #8e8e93; margin-top: 4px; }
+.total-badge { display: inline-block; background: #007aff; color: white; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-left: 10px; }
+.card { background: white; border-radius: 16px; padding: 20px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04); margin-bottom: 18px; }
+.card-title { font-size: 13px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 200px; overflow-x: auto; overflow-y: hidden; }
+.chart-inner { display: flex; align-items: flex-end; gap: 3px; height: 180px; min-width: 100%; padding-bottom: 0; }
+.bar-col { display: flex; flex-direction: column; align-items: center; flex: 1; min-width: 18px; max-width: 40px; height: 100%; justify-content: flex-end; position: relative; }
+.bar { width: 100%; background: #007aff; border-radius: 4px 4px 0 0; transition: background 0.15s; position: relative; cursor: pointer; min-height: 2px; }
+.bar:hover { background: #0066d6; }
+.bar-tooltip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: rgba(28,28,30,0.9); color: white; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10; }
+.bar:hover .bar-tooltip { opacity: 1; }
+.bar-label { font-size: 9px; color: #8e8e93; margin-top: 4px; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; height: 28px; overflow: hidden; }
+.dow-chart { display: flex; flex-direction: column; gap: 8px; }
+.dow-row { display: flex; align-items: center; gap: 10px; }
+.dow-label { font-size: 12px; font-weight: 500; color: #3c3c43; width: 28px; flex-shrink: 0; }
+.dow-track { flex: 1; height: 22px; background: #f2f2f7; border-radius: 6px; overflow: hidden; }
+.dow-bar { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #34c759, #30d158); width: 0%; }
+.dow-count { font-size: 12px; font-variant-numeric: tabular-nums; color: #8e8e93; width: 44px; text-align: right; flex-shrink: 0; }
+.tables-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+.mini-card { background: white; border-radius: 14px; padding: 16px 16px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04); }
+.mini-title { font-size: 11px; font-weight: 600; color: #8e8e93; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+.mini-table { width: 100%; border-collapse: collapse; }
+.mini-table tr { border-bottom: 1px solid #f2f2f7; }
+.mini-table tr:last-child { border-bottom: none; }
+.mini-table td { padding: 6px 0; font-size: 12px; vertical-align: middle; }
+.mini-table td:first-child { color: #1c1c1e; font-weight: 500; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-table td:last-child { text-align: right; color: #8e8e93; font-variant-numeric: tabular-nums; font-size: 11px; }
+.rank-pill { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; margin-right: 6px; flex-shrink: 0; }
+.rank-1 { background: #ffd60a; color: #3a3000; }
+.rank-2 { background: #c7c7cc; color: #1c1c1e; }
+.rank-3 { background: #bf6a2e; color: white; }
+.rank-4, .rank-5 { background: #f2f2f7; color: #3c3c43; }
+.bottom-pill { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; margin-right: 6px; background: #fff3f3; color: #ff3b30; }
+.loading-state { text-align: center; padding: 60px 20px; color: #8e8e93; font-size: 14px; }
         .search-form { display: flex; flex-direction: column; gap: 9px; }
 
         .file-upload-label {
@@ -879,6 +950,20 @@
                     <input class="field-input" id="end-date" name="end_date" type="date">
                 </div>
             </div>
+            <div class="field-group">
+    <span class="field-label">Country</span>
+    <input class="field-input" id="country-filter" placeholder="e.g. FR, RU..." list="country-list">
+    <datalist id="country-list"></datalist>
+</div>
+<div class="field-group">
+    <span class="field-label">City</span>
+    <input class="field-input" id="city-filter" placeholder="e.g. Paris..." list="city-list">
+    <datalist id="city-list"></datalist>
+</div>
+<div class="field-group">
+    <span class="field-label">H3 Cell</span>
+    <input class="field-input" id="h3-filter" placeholder="H3 hex ID...">
+</div>
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
         </form>
@@ -1075,6 +1160,33 @@
 </div>
  
 <script>
+fetch('/autocomplete')
+    .then(r => r.json())
+    .then(data => {
+        const cl = document.getElementById('country-list');
+        data.countries.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            cl.appendChild(opt);
+        });
+        const ci = document.getElementById('city-list');
+        data.cities.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            ci.appendChild(opt);
+        });
+    });
+const country = document.getElementById('country-filter').value;
+const city = document.getElementById('city-filter').value;
+const h3cell = document.getElementById('h3-filter').value;
+
+const resp = await fetch('/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding, 
+                           start_date: startDate, end_date: endDate, limit,
+                           country, city, h3cell }),
+});
 const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 async function loadStats() {

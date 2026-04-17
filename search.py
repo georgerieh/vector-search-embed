@@ -120,165 +120,71 @@ def _score_dino_rows(rows, dino_q, face_scores):
         results.append((dino_score + face_score, path, location, lat, lon))
     return results
 
-def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
+def search_with_images(image, limit, embedding, start_date="", end_date="", 
+                       facenet_embedding=None, country="", city="", h3cell=""):
+    dino_features = get_image_embedding(embedding) if embedding is not None else None
+    rows, stats = _search(dino_features, facenet_embedding, limit=limit,
+                          start_date=start_date, end_date=end_date,
+                          country=country, city=city, h3cell=h3cell)
+    stats["generation_time"] = 0
+    return rows, stats
+
+def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
+            country="", city="", h3cell=""):
     conn = get_conn()
     st = time.time()
-    if not dino_query and not start_date:
+
+    # build WHERE clause dynamically
+    conditions = []
+    params = []
+
+    if start_date and end_date:
+        conditions.append("date BETWEEN ? AND ?")
+        params.extend([start_date, end_date])
+    elif start_date:
+        conditions.append("date = ?")
+        params.append(start_date)
+
+    if country:
+        conditions.append("country = ?")
+        params.append(country)
+    if city:
+        conditions.append("city = ?")
+        params.append(city)
+    if h3cell:
+        # match photos whose lat/lon falls in this h3 cell — store h3 cell in DB or compute on the fly
+        # simplest: add h3_cell column and filter on it
+        conditions.append("h3_cell = ?")
+        params.append(h3cell)
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    where_params = tuple(params)
+
+    if not dino_query and not conditions:
         conn.close()
         return [], {"query_time": round(time.time() - st, 3)}
-    # date-only, no vectors
-    if start_date and not dino_query:
-        if end_date:
-            sql = "SELECT path, location, lat, lon FROM photos WHERE date BETWEEN ? AND ? ORDER BY date"
-            params = (start_date, end_date)
-        else:
-            sql = "SELECT path, location, lat, lon FROM photos WHERE date = ? ORDER BY date LIMIT ?"
-            params = (start_date, limit)
 
-        rows = conn.execute(sql, params).fetchall()
-        seen = set()
+    if not dino_query and conditions:
+        # filter-only, no vector search
+        sql = f"SELECT path, location, lat, lon FROM photos {where} ORDER BY date LIMIT ?"
+        rows = conn.execute(sql, where_params + (limit,)).fetchall()
+        # ... format and return same as date-only path
         results = []
         for path, location, lat, lon in rows:
-            if path in seen:
-                continue
-            seen.add(path)
-            try:
-                ts = int(os.path.getmtime(path))
-            except OSError:
-                ts = 0
             results.append({
                 "location": location,
                 "url": unquote(path).replace(f"{MOUNT_PATH}/", ""),
-                "score": 0.0,
-                "lat": lat,
-                "lon": lon,
-                "timestamp": ts,
+                "score": 0.0, "lat": lat, "lon": lon, "timestamp": 0,
             })
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
 
-    if start_date and end_date:
-        where = "WHERE p.date BETWEEN ? AND ?"   # for face SQL (has p alias)
-        where_photos = "WHERE date BETWEEN ? AND ?"  # for photos-only SQL
-        params = (start_date, end_date)
-    elif start_date:
-        where = "WHERE p.date = ?"
-        where_photos = "WHERE date = ?"
-        params = (start_date,)
-    else:
-        where = ""
-        where_photos = ""
-        params = ()
-    if not dino_query:
-        conn.close()
-        return [], {"query_time": round(time.time() - st, 3)}
-    else:
-        results = _vector_search(conn, dino_query, facenet_query, where, params)
-        return results, {"query_time": round(time.time() - st, 3)}
-# _dino_model = None
-# _dino_preprocess = None
-# _facenet_model = None
-# _mtcnn = None
-
-# def _get_dino():
-#     global _dino_model, _dino_preprocess
-#     if _dino_model is None:
-#         import torch
-#         import timm
-#         from torchvision import transforms
-#         torch.backends.quantized.engine = 'qnnpack'
-#         print("loading quantized DINO...", flush=True)
-#         model = timm.create_model('vit_base_patch16_224.dino', pretrained=False, num_classes=0)
-#         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
-#         model.load_state_dict(torch.load(
-#             os.path.join(_DIR, 'dino_quantized.pt'),
-#             map_location='cpu', weights_only=False
-#         ))
-#         _dino_model = model.eval()
-#         _dino_preprocess = transforms.Compose([
-#             transforms.Resize(224),
-#             transforms.CenterCrop(224),
-#             transforms.ToTensor(),
-#             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-#         ])
-#     return _dino_model, _dino_preprocess
-
-# def _get_facenet_pytorch():
-#     global _facenet_model, _mtcnn
-#     if _facenet_model is None:
-#         import torch
-#         from facenet_pytorch import MTCNN, InceptionResnetV1
-#         torch.backends.quantized.engine = 'qnnpack'
-#         _mtcnn = MTCNN(keep_all=True, device="cpu")
-#         print("loading quantized FaceNet...", flush=True)
-#         model = InceptionResnetV1(pretrained=None, num_classes=512)
-#         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
-#         model.load_state_dict(torch.load(
-#             os.path.join(_DIR, 'facenet_quantized.pt'),
-#             map_location='cpu', weights_only=False
-#         ))
-#         _facenet_model = model.eval()
-#     return _facenet_model, _mtcnn
-
+    results = _vector_search(conn, dino_query, facenet_query, where, where_params)
+    conn.close()
+    return results, {"query_time": round(time.time() - st, 3)}
 def get_image_embedding(embedding) -> list:
-    # import torch
-    # model, preprocess = _get_dino()
-    # with torch.no_grad():
-    #     tensor = preprocess(img).unsqueeze(0)
-    #     feats = model.forward_features(tensor)
-    #     if feats.ndim == 3:
-    #         feats = feats[:, 0, :]
-    #     embedding = feats.squeeze(0).numpy()
     return (embedding / np.linalg.norm(embedding)).tolist()
 
-# def get_face_embeddings(img: PILImage.Image, threshold=0.9):
-#     import torch
-#     model, mtcnn = _get_facenet_pytorch()
-#     boxes, probs = mtcnn.detect(img)
-#     if boxes is None:
-#         return None
-#     faces = mtcnn(img)
-#     if faces is None:
-#         return None
-#     face_vecs = []
-#     for face_tensor, prob in zip(faces, probs):
-#         if prob is None or prob < threshold:
-#             continue
-#         with torch.no_grad():
-#             feat = model(face_tensor.unsqueeze(0))
-#         vec = feat[0].numpy()
-#         face_vecs.append(vec / np.linalg.norm(vec))
-#     if not face_vecs:
-#         return None
-#     avg = np.mean(face_vecs, axis=0)
-#     return (avg / np.linalg.norm(avg)).tolist()
-def search_with_images(image, limit,embedding, facenet_embedding, start_date="", end_date="", ):
-    import gc
-    dino_features = None
-    facenet_features = None
-
-    # if image:
-    #     img = PILImage.open(image).convert("RGB")
-        
-    #     # load DINO, run, then free
-    dino_features = get_image_embedding(embedding) if embedding is not None else None #fix
-    #     global _dino_model, _dino_preprocess
-    #     _dino_model = None
-    #     _dino_preprocess = None
-    #     gc.collect()
-        
-    #     # now load FaceNet
-    facenet_features = get_image_embedding(facenet_embedding) if facenet_embedding is not None else None
-    #     global _facenet_model, _mtcnn
-    #     _facenet_model = None
-    #     _mtcnn = None
-    #     gc.collect()
-
-    st = time.time()
-    rows, stats = _search(dino_features, facenet_features, limit=limit,
-                          start_date=start_date, end_date=end_date)
-    stats["generation_time"] = round(time.time() - st, 3)
-    return rows, stats
 
 def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None):
     limit = limit if limit is not None else 50
@@ -289,9 +195,12 @@ def return_file(search_parser, text, image, table, limit, start_date="", end_dat
             image,
             limit,
             embedding,
-            facenet_embedding,
             start_date=start_date if start_date is not None else "",
             end_date=end_date if end_date is not None else "",
+            facenet_embedding=None,
+            country=None,
+            city=None, 
+            h3cell=None
         )
 
     return {
