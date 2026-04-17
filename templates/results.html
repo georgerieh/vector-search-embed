@@ -123,6 +123,9 @@
         const startDate = document.getElementById('start-date').value;
         const endDate = document.getElementById('end-date').value;
         const limit = document.getElementById('limit').value || 50;
+            const country = document.getElementById('country-filter').value;
+    const city = document.getElementById('city-filter').value;
+    const h3cell = document.getElementById('h3-filter').value;
 
         document.getElementById('loading-container').style.display = 'block';
         loadingBar.style.width = '0%';
@@ -156,7 +159,9 @@
         const resp = await fetch('/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding, start_date: startDate, end_date: endDate, limit }),
+            body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding, 
+                           start_date: startDate, end_date: endDate, limit,
+                           country, city, h3cell }),
         });
         const data = await resp.json();
 
@@ -1176,16 +1181,6 @@ fetch('/autocomplete')
             ci.appendChild(opt);
         });
     });
-const country = document.getElementById('country-filter').value;
-const city = document.getElementById('city-filter').value;
-const h3cell = document.getElementById('h3-filter').value;
-
-const resp = await fetch('/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding, 
-                           start_date: startDate, end_date: endDate, limit,
-                           country, city, h3cell }),
 });
 const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -1213,6 +1208,7 @@ async function loadStats() {
     valid.forEach(d => {
         const [year, month] = d.month.split('-');
             const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            const pct = Math.round((d.count / max) * 100);
             const label = names[parseInt(month)-1] + ' ' + year.slice(2);
             const col = document.createElement('div');
             col.className = 'bar-col';
