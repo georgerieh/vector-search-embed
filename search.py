@@ -191,7 +191,7 @@ def get_image_embedding(embedding) -> list:
     return (embedding / np.linalg.norm(embedding)).tolist()
 
 
-def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None):
+def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None, country=None, city=None, h3cell=None):
     limit = limit if limit is not None else 50
     images, stats = [], {}
 
@@ -202,10 +202,10 @@ def return_file(search_parser, text, image, table, limit, start_date="", end_dat
             embedding,
             start_date=start_date if start_date is not None else "",
             end_date=end_date if end_date is not None else "",
-            facenet_embedding=None,
-            country=None,
-            city=None, 
-            h3cell=None
+            facenet_embedding=facenet_embedding,
+            country=country,
+            city=city, 
+            h3cell=h3cell
         )
 
     return {

@@ -1296,7 +1296,7 @@ function setView(view) {
 
     if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 0);
     if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
-    if (view === 'memory' && !currentMemory) loadMemory();
+    if (view === 'memory') loadMemory();
 }
 let galleryIndex = 0;
 
