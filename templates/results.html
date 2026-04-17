@@ -11,74 +11,186 @@
     <script src="https://unpkg.com/leaflet.fullscreen/leaflet.fullscreen.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"> </script>
     <script type="module">
-        import { InferenceSession, Tensor } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
+    import { InferenceSession, Tensor } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
+    import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
 
-        const loadingBar = document.getElementById('loading-bar');
-        const loadingText = document.getElementById('loading-text');
+    const loadingBar = document.getElementById('loading-bar');
+    const loadingText = document.getElementById('loading-text');
+    const btn = document.querySelector('button[name="forwardBtn"]');
 
-        loadingText.textContent = 'Loading model...';
-        loadingBar.style.width = '30%';
-        document.querySelector('button[name="forwardBtn"]').disabled = true;
+    btn.disabled = true;
+    let animDone = false;
+    const start = performance.now();
 
-        const session = await InferenceSession.create('/models/dino_vitb16_inline.onnx');
-        
+    function updatePercent(target, label) {
+        if (animDone) return;
+        const elapsed = performance.now() - start;
+        const progress = Math.min(elapsed / 10000, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const pct = Math.round(eased * target);
+        loadingBar.style.width = pct + '%';
+        loadingText.textContent = `${label} ${pct}%`;
+        if (pct < target) requestAnimationFrame(() => updatePercent(target, label));
+    }
 
-        // re-enable once ready
-        document.querySelector('button[name="forwardBtn"]').disabled = false;
-        loadingBar.style.width = '100%';
-        loadingText.textContent = 'Model ready';
-        setTimeout(() => {
-            document.getElementById('loading-container').style.display = 'none';
-        }, 800);
-        function preprocessImage(imgFile) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 224;
-                    canvas.height = 224;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, 224, 224);
-                    const { data } = ctx.getImageData(0, 0, 224, 224);
-                    const tensor = new Float32Array(3 * 224 * 224);
-                    for (let i = 0; i < 224 * 224; i++) {
-                        tensor[i]                 = (data[i * 4]     / 255.0 - 0.5) / 0.5;
-                        tensor[i + 224 * 224]     = (data[i * 4 + 1] / 255.0 - 0.5) / 0.5;
-                        tensor[i + 2 * 224 * 224] = (data[i * 4 + 2] / 255.0 - 0.5) / 0.5;
-                    }
-                    URL.revokeObjectURL(img.src);
-                    resolve(new Tensor('float32', tensor, [1, 3, 224, 224]));
-                };
-                img.src = URL.createObjectURL(imgFile);
-            });
+    loadingText.textContent = 'Loading DINO... 0%';
+    requestAnimationFrame(() => updatePercent(45, 'Loading DINO...'));
+    const dinoSession = await InferenceSession.create('/models/dino_vitb16_inline.onnx');
+
+    animDone = true;
+    loadingBar.style.width = '50%';
+    loadingText.textContent = 'Loading FaceNet... 50%';
+    animDone = false;
+    const faceStart = performance.now();
+
+    function updateFacePercent() {
+        if (animDone) return;
+        const elapsed = performance.now() - faceStart;
+        const progress = Math.min(elapsed / 8000, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const pct = 50 + Math.round(eased * 45);
+        loadingBar.style.width = pct + '%';
+        loadingText.textContent = `Loading FaceNet... ${pct}%`;
+        if (pct < 95) requestAnimationFrame(updateFacePercent);
+    }
+    requestAnimationFrame(updateFacePercent);
+
+    const faceNetSession = await InferenceSession.create('/models/facenet_inline.onnx');
+
+    animDone = true;
+
+    // load mediapipe face detector
+    loadingText.textContent = 'Loading face detector... 95%';
+    loadingBar.style.width = '95%';
+    const vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm'
+    );
+    const faceDetector = await FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+        },
+        runningMode: 'IMAGE',
+        minDetectionConfidence: 0.9,
+    });
+
+    loadingBar.style.width = '100%';
+    loadingText.textContent = 'Ready ✓ 100%';
+    btn.disabled = false;
+    setTimeout(() => {
+        document.getElementById('loading-container').style.display = 'none';
+    }, 800);
+
+    // --- preprocessing ---
+
+    function preprocessDino(imgElement) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 224; canvas.height = 224;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(imgElement, 0, 0, 224, 224);
+        const { data } = ctx.getImageData(0, 0, 224, 224);
+        const tensor = new Float32Array(3 * 224 * 224);
+        for (let i = 0; i < 224 * 224; i++) {
+            tensor[i]                 = (data[i * 4]     / 255.0 - 0.5) / 0.5;
+            tensor[i + 224 * 224]     = (data[i * 4 + 1] / 255.0 - 0.5) / 0.5;
+            tensor[i + 2 * 224 * 224] = (data[i * 4 + 2] / 255.0 - 0.5) / 0.5;
         }
+        return new Tensor('float32', tensor, [1, 3, 224, 224]);
+    }
 
-        let embeddingReady = false;
+    function preprocessFace(imgElement, box, imgW, imgH) {
+        // box is {originX, originY, width, height} in pixels
+        const canvas = document.createElement('canvas');
+        canvas.width = 160; canvas.height = 160;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(
+            imgElement,
+            box.originX, box.originY, box.width, box.height,
+            0, 0, 160, 160
+        );
+        const { data } = ctx.getImageData(0, 0, 160, 160);
+        const tensor = new Float32Array(3 * 160 * 160);
+        // FaceNet uses ImageNet normalization: mean=(0.5,0.5,0.5) std=(0.5,0.5,0.5)
+        for (let i = 0; i < 160 * 160; i++) {
+            tensor[i]                 = (data[i * 4]     / 255.0 - 0.5) / 0.5;
+            tensor[i + 160 * 160]     = (data[i * 4 + 1] / 255.0 - 0.5) / 0.5;
+            tensor[i + 2 * 160 * 160] = (data[i * 4 + 2] / 255.0 - 0.5) / 0.5;
+        }
+        return new Tensor('float32', tensor, [1, 3, 160, 160]);
+    }
 
-        document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
-            if (embeddingReady) return;
-            e.preventDefault();
+    function normalize(arr) {
+        const norm = Math.sqrt(arr.reduce((s, v) => s + v * v, 0));
+        return arr.map(v => v / norm);
+    }
 
-            const fileInput = document.getElementById('image-in');
-            if (fileInput.files.length > 0) {
-                document.getElementById('loading-container').style.display = 'block';
-                loadingBar.style.width = '0%';
-                loadingText.textContent = 'Computing embedding...';
-                loadingBar.style.width = '60%';
+    function loadImage(file) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = URL.createObjectURL(file);
+        });
+    }
 
-                const tensor = await preprocessImage(fileInput.files[0]);
-                const results = await session.run({ pixel_values: tensor });
-                const cls = Array.from(results.last_hidden_state.data).slice(0, 768);
-                document.getElementById('embedding-input').value = JSON.stringify(cls);
+    // --- submit handler ---
 
-                loadingBar.style.width = '100%';
-                loadingText.textContent = 'Done!';
-            }
+    let embeddingReady = false;
 
+    document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
+        if (embeddingReady) return;
+        e.preventDefault();
+
+        const fileInput = document.getElementById('image-in');
+        if (fileInput.files.length === 0) {
+            // no image — allow date-only submit
             embeddingReady = true;
             e.target.submit();
-        });
-    </script>
+            return;
+        }
+
+        document.getElementById('loading-container').style.display = 'block';
+        loadingBar.style.width = '0%';
+        btn.disabled = true;
+
+        const img = await loadImage(fileInput.files[0]);
+
+        // DINO embedding
+        loadingText.textContent = 'Computing DINO embedding... 0%';
+        loadingBar.style.width = '20%';
+        const dinoTensor = preprocessDino(img);
+        const dinoResults = await dinoSession.run({ pixel_values: dinoTensor });
+        const dinoEmbedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
+        document.getElementById('embedding-input').value = JSON.stringify(dinoEmbedding);
+        loadingBar.style.width = '50%';
+
+        // face detection + FaceNet embedding
+        loadingText.textContent = 'Detecting faces... 50%';
+        const detection = faceDetector.detect(img);
+        let faceEmbedding = null;
+
+        if (detection.detections.length > 0) {
+            loadingText.textContent = 'Computing face embedding... 60%';
+            loadingBar.style.width = '60%';
+
+            // use highest confidence detection
+            const best = detection.detections.reduce((a, b) =>
+                a.categories[0].score > b.categories[0].score ? a : b
+            );
+            const box = best.boundingBox;
+
+            const faceTensor = preprocessFace(img, box, img.width, img.height);
+            const faceResults = await faceNetSession.run({ input: faceTensor });
+            faceEmbedding = normalize(Array.from(faceResults.embedding.data));
+        }
+
+        document.getElementById('facenet-input').value = faceEmbedding ? JSON.stringify(faceEmbedding) : '';
+        loadingBar.style.width = '100%';
+        loadingText.textContent = faceEmbedding ? 'Face found ✓ Done!' : 'No face detected — DINO only';
+
+        URL.revokeObjectURL(img.src);
+        embeddingReady = true;
+        setTimeout(() => e.target.submit(), 400); // short delay so user sees status
+    });
+</script>
     <!--	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"-->
     <!--		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />-->
     <!--	<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"-->
@@ -459,6 +571,7 @@
 				<form name="input" action="/" method="post" enctype="multipart/form-data">
                     <input accept="image/*" id="image-in" name="image" type="file"><br><br>
                     <input type="hidden" id="embedding-input" name="embedding">
+                    <input type="hidden" id="facenet-input" name="facenet_embedding">
 
                     <label for="start-date">Start Date:</label>
                     <input id="start-date" name="start_date" type="date"><br><br>

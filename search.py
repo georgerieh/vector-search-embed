@@ -173,7 +173,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
         conn.close()
         return [], {"query_time": round(time.time() - st, 3)}
     else:
-        results = _vector_search(conn, dino_query, facenet_query, where, where_photos, params)
+        results = _vector_search(conn, dino_query, facenet_query, where, params)
         return results, {"query_time": round(time.time() - st, 3)}
 # _dino_model = None
 # _dino_preprocess = None
@@ -252,7 +252,7 @@ def get_image_embedding(embedding) -> list:
 #         return None
 #     avg = np.mean(face_vecs, axis=0)
 #     return (avg / np.linalg.norm(avg)).tolist()
-def search_with_images(image, limit,embedding, start_date="", end_date="", ):
+def search_with_images(image, limit,embedding, facenet_embedding, start_date="", end_date="", ):
     import gc
     dino_features = None
     facenet_features = None
@@ -268,7 +268,7 @@ def search_with_images(image, limit,embedding, start_date="", end_date="", ):
     #     gc.collect()
         
     #     # now load FaceNet
-    #     facenet_features = get_face_embeddings(img)
+    facenet_features = get_image_embedding(facenet_embedding) if facenet_embedding is not None else None
     #     global _facenet_model, _mtcnn
     #     _facenet_model = None
     #     _mtcnn = None
@@ -280,7 +280,7 @@ def search_with_images(image, limit,embedding, start_date="", end_date="", ):
     stats["generation_time"] = round(time.time() - st, 3)
     return rows, stats
 
-def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None):
+def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None):
     limit = limit if limit is not None else 50
     images, stats = [], {}
 
@@ -289,6 +289,7 @@ def return_file(search_parser, text, image, table, limit, start_date="", end_dat
             image,
             limit,
             embedding,
+            facenet_embedding,
             start_date=start_date if start_date is not None else "",
             end_date=end_date if end_date is not None else "",
         )
