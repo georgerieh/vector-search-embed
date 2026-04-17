@@ -1094,12 +1094,12 @@ async function loadStats() {
     }
 
     function renderMonthChart(byMonth) {
-        const el = document.getElementById('month-chart');
-        if (!byMonth.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
-        const max = Math.max(...byMonth.map(d => d.count));
-        byMonth.forEach(d => {
-            const pct = Math.round((d.count / max) * 100);
-            const [year, month] = d.month.split('-');
+    const el = document.getElementById('month-chart');
+    const valid = byMonth.filter(d => d.month && d.month.includes('-'));
+    if (!valid.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
+    const max = Math.max(...valid.map(d => d.count));
+    valid.forEach(d => {
+        const [year, month] = d.month.split('-');
             const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             const label = names[parseInt(month)-1] + ' ' + year.slice(2);
             const col = document.createElement('div');
@@ -1111,9 +1111,10 @@ async function loadStats() {
 
     function renderDowChart(byDow) {
         const el = document.getElementById('dow-chart');
-        if (!byDow.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
+        const valid = byDow.filter(d => d.dow !== null && d.dow !== undefined);
+        if (!valid.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
         const counts = Array(7).fill(0);
-        byDow.forEach(d => { counts[d.dow] = d.count; });
+        valid.forEach(d => { counts[d.dow] = d.count; });
         const max = Math.max(...counts);
         counts.forEach((count, dow) => {
             const pct = max > 0 ? Math.round((count/max)*100) : 0;
