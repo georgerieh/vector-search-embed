@@ -278,7 +278,7 @@ def search_with_images(image, limit,embedding, start_date="", end_date="", ):
     stats["generation_time"] = round(time.time() - st, 3)
     return rows, stats
 
-def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=[0.0]*768):
+def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None):
     limit = limit if limit is not None else 50
     images, stats = [], {}
 

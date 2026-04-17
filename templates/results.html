@@ -11,22 +11,26 @@
     <script src="https://unpkg.com/leaflet.fullscreen/leaflet.fullscreen.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"> </script>
     <script type="module">
-    import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.1.0';
+    import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/dist/transformers.min.js';
     const pipe = await pipeline('image-feature-extraction', 'Xenova/vit-base-patch16-224', {
         device: 'webgpu',
     });
 
+    let embeddingReady = false;
+
     document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
+        if (embeddingReady) return; // let it submit normally
         e.preventDefault();
+        
         const fileInput = document.getElementById('image-in');
         if (fileInput.files.length > 0) {
             const url = URL.createObjectURL(fileInput.files[0]);
             const result = await pipe(url);
-            // flatten to 1D and inject as hidden field
-            const flat = Array.from(result.data);
-            document.getElementById('embedding-input').value = JSON.stringify(flat);
+            document.getElementById('embedding-input').value = JSON.stringify(Array.from(result.data));
             URL.revokeObjectURL(url);
         }
+        
+        embeddingReady = true;
         e.target.submit();
     });
     </script>
@@ -43,10 +47,7 @@
 	<!-- <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.5.0/maptiler-sdk.umd.min.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.5.0/maptiler-sdk.css" rel="stylesheet" />
     <script src="https://cdn.maptiler.com/leaflet-maptilersdk/v4.1.0/leaflet-maptilersdk.umd.min.js"></script> -->
-	<script src="http://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
-        <script
-            src="https://api.tiles.mapbox.com/mapbox.js/plugins/leaflet-markercluster/v0.4.0/leaflet.markercluster.js"></script>
-    </script>
+    <script src="https://api.tiles.mapbox.com/mapbox.js/plugins/leaflet-markercluster/v0.4.0/leaflet.markercluster.js"></script>
 	<meta charset="utf-8">
 	<title>Image search</title>
 	<style>
@@ -409,7 +410,7 @@
             <!--			</div>-->
 			<div class='section'>
     
-				<form name="input" action="/" method="post" enctype="multipart/form-data" onsubmit="return function getembedding()">
+				<form name="input" action="/" method="post" enctype="multipart/form-data">
                     <input accept="image/*" id="image-in" name="image" type="file"><br><br>
                     <input type="hidden" id="embedding-input" name="embedding">
 
