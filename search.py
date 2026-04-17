@@ -22,7 +22,7 @@ def _blob_to_vec(blob, dim):
         return np.frombuffer(blob, dtype=np.float32)
     return None
 
-def _vector_search(conn, dino_query, facenet_query, where_clause="", where_photos="", where_params=()):
+def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=()):
     dino_q = np.array(dino_query, dtype=np.float32)
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
     facenet_q = np.array(facenet_query, dtype=np.float32) if has_face_query else None
@@ -167,114 +167,110 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date=""):
         where = ""
         where_photos = ""
         params = ()
+    if not dino_query:
+        conn.close()
+        return [], {"query_time": round(time.time() - st, 3)}
+    else:
+        results = _vector_search(conn, dino_query, facenet_query, where, where_photos, params)
+        return results, {"query_time": round(time.time() - st, 3)}
+# _dino_model = None
+# _dino_preprocess = None
+# _facenet_model = None
+# _mtcnn = None
 
-    results = _vector_search(
-            conn, 
-            dino_query or [0.0] * 768, 
-            facenet_query, 
-            where, 
-            where_photos,
-            params)
-    conn.close()
-    return results, {"query_time": round(time.time() - st, 3)}
-_dino_model = None
-_dino_preprocess = None
-_facenet_model = None
-_mtcnn = None
+# def _get_dino():
+#     global _dino_model, _dino_preprocess
+#     if _dino_model is None:
+#         import torch
+#         import timm
+#         from torchvision import transforms
+#         torch.backends.quantized.engine = 'qnnpack'
+#         print("loading quantized DINO...", flush=True)
+#         model = timm.create_model('vit_base_patch16_224.dino', pretrained=False, num_classes=0)
+#         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+#         model.load_state_dict(torch.load(
+#             os.path.join(_DIR, 'dino_quantized.pt'),
+#             map_location='cpu', weights_only=False
+#         ))
+#         _dino_model = model.eval()
+#         _dino_preprocess = transforms.Compose([
+#             transforms.Resize(224),
+#             transforms.CenterCrop(224),
+#             transforms.ToTensor(),
+#             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+#         ])
+#     return _dino_model, _dino_preprocess
 
-def _get_dino():
-    global _dino_model, _dino_preprocess
-    if _dino_model is None:
-        import torch
-        import timm
-        from torchvision import transforms
-        torch.backends.quantized.engine = 'qnnpack'
-        print("loading quantized DINO...", flush=True)
-        model = timm.create_model('vit_base_patch16_224.dino', pretrained=False, num_classes=0)
-        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
-        model.load_state_dict(torch.load(
-            os.path.join(_DIR, 'dino_quantized.pt'),
-            map_location='cpu', weights_only=False
-        ))
-        _dino_model = model.eval()
-        _dino_preprocess = transforms.Compose([
-            transforms.Resize(224),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-        ])
-    return _dino_model, _dino_preprocess
+# def _get_facenet_pytorch():
+#     global _facenet_model, _mtcnn
+#     if _facenet_model is None:
+#         import torch
+#         from facenet_pytorch import MTCNN, InceptionResnetV1
+#         torch.backends.quantized.engine = 'qnnpack'
+#         _mtcnn = MTCNN(keep_all=True, device="cpu")
+#         print("loading quantized FaceNet...", flush=True)
+#         model = InceptionResnetV1(pretrained=None, num_classes=512)
+#         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
+#         model.load_state_dict(torch.load(
+#             os.path.join(_DIR, 'facenet_quantized.pt'),
+#             map_location='cpu', weights_only=False
+#         ))
+#         _facenet_model = model.eval()
+#     return _facenet_model, _mtcnn
 
-def _get_facenet_pytorch():
-    global _facenet_model, _mtcnn
-    if _facenet_model is None:
-        import torch
-        from facenet_pytorch import MTCNN, InceptionResnetV1
-        torch.backends.quantized.engine = 'qnnpack'
-        _mtcnn = MTCNN(keep_all=True, device="cpu")
-        print("loading quantized FaceNet...", flush=True)
-        model = InceptionResnetV1(pretrained=None, num_classes=512)
-        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear, torch.nn.Conv2d}, dtype=torch.qint8)
-        model.load_state_dict(torch.load(
-            os.path.join(_DIR, 'facenet_quantized.pt'),
-            map_location='cpu', weights_only=False
-        ))
-        _facenet_model = model.eval()
-    return _facenet_model, _mtcnn
-
-def get_image_embedding(img: PILImage.Image) -> list:
-    import torch
-    model, preprocess = _get_dino()
-    with torch.no_grad():
-        tensor = preprocess(img).unsqueeze(0)
-        feats = model.forward_features(tensor)
-        if feats.ndim == 3:
-            feats = feats[:, 0, :]
-        embedding = feats.squeeze(0).numpy()
+def get_image_embedding(embedding) -> list:
+    # import torch
+    # model, preprocess = _get_dino()
+    # with torch.no_grad():
+    #     tensor = preprocess(img).unsqueeze(0)
+    #     feats = model.forward_features(tensor)
+    #     if feats.ndim == 3:
+    #         feats = feats[:, 0, :]
+    #     embedding = feats.squeeze(0).numpy()
     return (embedding / np.linalg.norm(embedding)).tolist()
 
-def get_face_embeddings(img: PILImage.Image, threshold=0.9):
-    import torch
-    model, mtcnn = _get_facenet_pytorch()
-    boxes, probs = mtcnn.detect(img)
-    if boxes is None:
-        return None
-    faces = mtcnn(img)
-    if faces is None:
-        return None
-    face_vecs = []
-    for face_tensor, prob in zip(faces, probs):
-        if prob is None or prob < threshold:
-            continue
-        with torch.no_grad():
-            feat = model(face_tensor.unsqueeze(0))
-        vec = feat[0].numpy()
-        face_vecs.append(vec / np.linalg.norm(vec))
-    if not face_vecs:
-        return None
-    avg = np.mean(face_vecs, axis=0)
-    return (avg / np.linalg.norm(avg)).tolist()
-def search_with_images(image, limit, start_date="", end_date="", use_dino_extract=True):
+# def get_face_embeddings(img: PILImage.Image, threshold=0.9):
+#     import torch
+#     model, mtcnn = _get_facenet_pytorch()
+#     boxes, probs = mtcnn.detect(img)
+#     if boxes is None:
+#         return None
+#     faces = mtcnn(img)
+#     if faces is None:
+#         return None
+#     face_vecs = []
+#     for face_tensor, prob in zip(faces, probs):
+#         if prob is None or prob < threshold:
+#             continue
+#         with torch.no_grad():
+#             feat = model(face_tensor.unsqueeze(0))
+#         vec = feat[0].numpy()
+#         face_vecs.append(vec / np.linalg.norm(vec))
+#     if not face_vecs:
+#         return None
+#     avg = np.mean(face_vecs, axis=0)
+#     return (avg / np.linalg.norm(avg)).tolist()
+def search_with_images(image, limit,embedding, start_date="", end_date="", ):
     import gc
     dino_features = None
     facenet_features = None
 
-    if use_dino_extract and image:
-        img = PILImage.open(image).convert("RGB")
+    # if image:
+    #     img = PILImage.open(image).convert("RGB")
         
-        # load DINO, run, then free
-        dino_features = get_image_embedding(img)
-        global _dino_model, _dino_preprocess
-        _dino_model = None
-        _dino_preprocess = None
-        gc.collect()
+    #     # load DINO, run, then free
+    dino_features = get_image_embedding(embedding) #fix
+    #     global _dino_model, _dino_preprocess
+    #     _dino_model = None
+    #     _dino_preprocess = None
+    #     gc.collect()
         
-        # now load FaceNet
-        facenet_features = get_face_embeddings(img)
-        global _facenet_model, _mtcnn
-        _facenet_model = None
-        _mtcnn = None
-        gc.collect()
+    #     # now load FaceNet
+    #     facenet_features = get_face_embeddings(img)
+    #     global _facenet_model, _mtcnn
+    #     _facenet_model = None
+    #     _mtcnn = None
+    #     gc.collect()
 
     st = time.time()
     rows, stats = _search(dino_features, facenet_features, limit=limit,
@@ -282,17 +278,17 @@ def search_with_images(image, limit, start_date="", end_date="", use_dino_extrac
     stats["generation_time"] = round(time.time() - st, 3)
     return rows, stats
 
-def return_file(search_parser, text, image, table, limit, start_date="", end_date=""):
-    limit = limit or 50
+def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=[0.0]*768):
+    limit = limit if limit is not None else 50
     images, stats = [], {}
 
     if search_parser == "search":
         images, stats = search_with_images(
             image,
-            limit=limit,
-            start_date=start_date or "",
-            end_date=end_date or "",
-            use_dino_extract=bool(image),
+            limit,
+            embedding,
+            start_date=start_date if start_date is not None else "",
+            end_date=end_date if end_date is not None else "",
         )
 
     return {
