@@ -70,9 +70,13 @@
     });
 
     loadingBar.style.width = '100%';
-    loadingText.textContent = 'Ready';
+    loadingText.textContent = '✓ Ready — upload a photo to search';
     btn.disabled = false;
-    setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
+    setTimeout(() => {
+        loadingBar.style.width = '0%';
+        loadingText.textContent = '';
+        document.getElementById('loading-container').style.display = 'none';
+    }, 2000); // longer so user sees it's ready
 
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
@@ -118,23 +122,48 @@
     }
 
     document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fileInput = document.getElementById('image-in');
-        const startDate = document.getElementById('start-date').value;
-        const endDate = document.getElementById('end-date').value;
-        const limit = document.getElementById('limit').value || 50;
-            const country = document.getElementById('country-filter').value;
+    e.preventDefault();
+    const fileInput = document.getElementById('image-in');
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+    const limit = document.getElementById('limit').value || 50;
+    const country = document.getElementById('country-filter').value;
     const city = document.getElementById('city-filter').value;
     const h3cell = document.getElementById('h3-filter').value;
 
+    const hasImage = fileInput.files.length > 0;
+    const hasFilters = startDate || endDate || country || city || h3cell;
+
+    // if no image, skip model entirely and search directly
+    if (!hasImage && hasFilters) {
         document.getElementById('loading-container').style.display = 'block';
-        loadingBar.style.width = '0%';
-        btn.disabled = true;
+        loadingBar.style.width = '50%';
+        loadingText.textContent = 'Searching...';
 
-        let embedding = null, facenetEmbedding = null;
+        const resp = await fetch('/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ embedding: null, facenet_embedding: null,
+                                   start_date: startDate, end_date: endDate, limit,
+                                   country, city, h3cell }),
+        });
+        const data = await resp.json();
+        loadingBar.style.width = '100%';
+        loadingText.textContent = `${data.images.length} results`;
+        setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
+        window.renderResults(data);
+        return; // don't proceed to model inference
+    }
 
-        if (fileInput.files.length > 0) {
-            const img = await loadImage(fileInput.files[0]);
+    // image search — needs models
+    document.getElementById('loading-container').style.display = 'block';
+    loadingBar.style.width = '0%';
+    btn.disabled = true;
+
+    let embedding = null, facenetEmbedding = null;
+
+    if (hasImage) {
+        const img = await loadImage(fileInput.files[0]);
             loadingText.textContent = 'Computing visual embedding...';
             loadingBar.style.width = '30%';
             const dinoResults = await dinoSession.run({ pixel_values: preprocessDino(img) });
@@ -151,27 +180,22 @@
                 facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
             }
             URL.revokeObjectURL(img.src);
-        }
+    }
 
-        loadingText.textContent = 'Searching memories...';
-        loadingBar.style.width = '90%';
-
-        const resp = await fetch('/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding, 
-                           start_date: startDate, end_date: endDate, limit,
-                           country, city, h3cell }),
-        });
-        const data = await resp.json();
-
-        loadingBar.style.width = '100%';
-        loadingText.textContent = `${data.images.length} memories found`;
-        setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 800);
-        btn.disabled = false;
-
-        window.renderResults(data);
+    const resp = await fetch('/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding,
+                               start_date: startDate, end_date: endDate, limit,
+                               country, city, h3cell }),
     });
+    const data = await resp.json();
+    loadingBar.style.width = '100%';
+    loadingText.textContent = `${data.images.length} memories found`;
+    setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 800);
+    btn.disabled = false;
+    window.renderResults(data);
+});
 
     // ── FAVORITES ──
     function getFavorites() {
@@ -1271,7 +1295,7 @@ async function loadStats() {
 </div>
 
 <!-- LOADING -->
-<div id="loading-container" style="display:none">
+<div id="loading-container">
     <div id="loading-text">Loading...</div>
     <div class="loading-track"><div id="loading-bar"></div></div>
 </div>
@@ -1431,45 +1455,46 @@ function renderSavedCollections() {
 }
 
 async function loadMemory() {
-    if (!window.openLightbox) {
-        await new Promise(resolve => {
-            const check = setInterval(() => {
-                if (window.openLightbox) { clearInterval(check); resolve(); }
-            }, 100);
-        });
-    }
     document.getElementById('memory-loading').style.display = 'flex';
     document.getElementById('memory-content').style.display = 'none';
 
-    const resp = await fetch('/memory');
-    const data = await resp.json();
-    currentMemory = data;
+    try {
+        const resp = await fetch('/memory');
+        const data = await resp.json();
+        currentMemory = data;
 
-    document.getElementById('memory-title').textContent = data.title;
-    document.getElementById('memory-subtitle').textContent = data.subtitle;
+        document.getElementById('memory-title').textContent = data.title;
+        document.getElementById('memory-subtitle').textContent = data.subtitle;
 
-    // hero = first photo
-    if (data.photos.length > 0) {
-        const heroUrl = data.photos[0].url.replace(/^\//, '');
-        document.getElementById('memory-hero').style.backgroundImage = `url('/files/${heroUrl}')`;
-        document.getElementById('memory-hero').onclick = () => window.openLightbox(data.photos, 0);
+        if (data.photos.length > 0) {
+            const heroUrl = data.photos[0].url.replace(/^\//, '');
+            document.getElementById('memory-hero').style.backgroundImage = `url('/files/${heroUrl}')`;
+            document.getElementById('memory-hero').onclick = () => {
+                if (window.openLightbox) window.openLightbox(data.photos, 0);
+            };
+        }
+
+        const grid = document.getElementById('memory-grid');
+        grid.innerHTML = '';
+        data.photos.slice(1).forEach((photo, i) => {
+            const url = photo.url.replace(/^\//, '');
+            const cell = document.createElement('div');
+            cell.style.cssText = `aspect-ratio:1;background:url('/files/${url}') center/cover;border-radius:4px;cursor:pointer;`;
+            cell.addEventListener('click', () => {
+                if (window.openLightbox) window.openLightbox(data.photos, i + 1);
+            });
+            grid.appendChild(cell);
+        });
+
+        renderSavedCollections();
+
+        document.getElementById('memory-loading').style.display = 'none';
+        document.getElementById('memory-content').style.display = 'block';
+    } catch (err) {
+        document.getElementById('memory-loading').innerHTML = 
+            '<div style="font-size:14px;color:#ff3b30">Failed to load memory</div>';
+        console.error('loadMemory error:', err);
     }
-
-    // grid = rest
-    const grid = document.getElementById('memory-grid');
-    grid.innerHTML = '';
-    data.photos.slice(1).forEach((photo, i) => {
-        const url = photo.url.replace(/^\//, '');
-        const cell = document.createElement('div');
-        cell.style.cssText = `aspect-ratio:1;background:url('/files/${url}') center/cover;border-radius:4px;cursor:pointer;`;
-        cell.addEventListener('click', () => window.openLightbox(data.photos, i + 1));
-        grid.appendChild(cell);
-    });
-
-    renderSavedCollections();
-
-    document.getElementById('memory-loading').style.display = 'none';
-    document.getElementById('memory-content').style.display = 'block';
 }
 
 document.getElementById('memory-save-btn').addEventListener('click', () => {
