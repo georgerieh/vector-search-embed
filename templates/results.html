@@ -1,6 +1,10 @@
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Memories</title>
+
     <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet"/>
     <link href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" rel="stylesheet"/>
     <link href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" rel="stylesheet"/>
@@ -8,8 +12,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
-    <script src="https://unpkg.com/leaflet.fullscreen/leaflet.fullscreen.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"> </script>
+
     <script type="module">
     import { InferenceSession, Tensor } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
     import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
@@ -39,7 +42,6 @@
 
     animDone = true;
     loadingBar.style.width = '50%';
-    loadingText.textContent = 'Loading FaceNet... 50%';
     animDone = false;
     const faceStart = performance.now();
 
@@ -54,33 +56,22 @@
         if (pct < 95) requestAnimationFrame(updateFacePercent);
     }
     requestAnimationFrame(updateFacePercent);
-
     const faceNetSession = await InferenceSession.create('/models/facenet_inline.onnx');
-
     animDone = true;
 
-    // load mediapipe face detector
     loadingText.textContent = 'Loading face detector... 95%';
     loadingBar.style.width = '95%';
-    const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm'
-    );
+    const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm');
     const faceDetector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
-        },
+        baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' },
         runningMode: 'IMAGE',
         minDetectionConfidence: 0.9,
     });
 
     loadingBar.style.width = '100%';
-    loadingText.textContent = 'Ready ✓ 100%';
+    loadingText.textContent = 'Ready';
     btn.disabled = false;
-    setTimeout(() => {
-        document.getElementById('loading-container').style.display = 'none';
-    }, 800);
-
-    // --- preprocessing ---
+    setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
 
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
@@ -90,94 +81,77 @@
         const { data } = ctx.getImageData(0, 0, 224, 224);
         const tensor = new Float32Array(3 * 224 * 224);
         for (let i = 0; i < 224 * 224; i++) {
-            tensor[i]                 = (data[i * 4]     / 255.0 - 0.5) / 0.5;
-            tensor[i + 224 * 224]     = (data[i * 4 + 1] / 255.0 - 0.5) / 0.5;
-            tensor[i + 2 * 224 * 224] = (data[i * 4 + 2] / 255.0 - 0.5) / 0.5;
+            tensor[i]           = (data[i*4]   /255.0-0.5)/0.5;
+            tensor[i+224*224]   = (data[i*4+1] /255.0-0.5)/0.5;
+            tensor[i+2*224*224] = (data[i*4+2] /255.0-0.5)/0.5;
         }
-        return new Tensor('float32', tensor, [1, 3, 224, 224]);
+        return new Tensor('float32', tensor, [1,3,224,224]);
     }
 
-    function preprocessFace(imgElement, box, imgW, imgH) {
-        // box is {originX, originY, width, height} in pixels
+    function preprocessFace(imgElement, box) {
         const canvas = document.createElement('canvas');
         canvas.width = 160; canvas.height = 160;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(
-            imgElement,
-            box.originX, box.originY, box.width, box.height,
-            0, 0, 160, 160
-        );
+        ctx.drawImage(imgElement, box.originX, box.originY, box.width, box.height, 0, 0, 160, 160);
         const { data } = ctx.getImageData(0, 0, 160, 160);
         const tensor = new Float32Array(3 * 160 * 160);
-        // FaceNet uses ImageNet normalization: mean=(0.5,0.5,0.5) std=(0.5,0.5,0.5)
         for (let i = 0; i < 160 * 160; i++) {
-            tensor[i]                 = (data[i * 4]     / 255.0 - 0.5) / 0.5;
-            tensor[i + 160 * 160]     = (data[i * 4 + 1] / 255.0 - 0.5) / 0.5;
-            tensor[i + 2 * 160 * 160] = (data[i * 4 + 2] / 255.0 - 0.5) / 0.5;
+            tensor[i]           = (data[i*4]   /255.0-0.5)/0.5;
+            tensor[i+160*160]   = (data[i*4+1] /255.0-0.5)/0.5;
+            tensor[i+2*160*160] = (data[i*4+2] /255.0-0.5)/0.5;
         }
-        return new Tensor('float32', tensor, [1, 3, 160, 160]);
+        return new Tensor('float32', tensor, [1,3,160,160]);
     }
 
     function normalize(arr) {
-        const norm = Math.sqrt(arr.reduce((s, v) => s + v * v, 0));
-        return arr.map(v => v / norm);
+        const norm = Math.sqrt(arr.reduce((s,v) => s+v*v, 0));
+        return arr.map(v => v/norm);
     }
 
     function loadImage(file) {
-        return new Promise((resolve) => {
+        return new Promise(resolve => {
             const img = new Image();
             img.onload = () => resolve(img);
             img.src = URL.createObjectURL(file);
         });
     }
 
-    // --- submit handler ---
-
     document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
         e.preventDefault();
-
         const fileInput = document.getElementById('image-in');
         const startDate = document.getElementById('start-date').value;
         const endDate = document.getElementById('end-date').value;
-        const limit = document.getElementById('limit').value;
+        const limit = document.getElementById('limit').value || 50;
 
         document.getElementById('loading-container').style.display = 'block';
         loadingBar.style.width = '0%';
         btn.disabled = true;
 
-        let embedding = null;
-        let facenetEmbedding = null;
+        let embedding = null, facenetEmbedding = null;
 
         if (fileInput.files.length > 0) {
             const img = await loadImage(fileInput.files[0]);
-
-            loadingText.textContent = 'Computing DINO embedding... 20%';
-            loadingBar.style.width = '20%';
-            const dinoTensor = preprocessDino(img);
-            const dinoResults = await dinoSession.run({ pixel_values: dinoTensor });
+            loadingText.textContent = 'Computing visual embedding...';
+            loadingBar.style.width = '30%';
+            const dinoResults = await dinoSession.run({ pixel_values: preprocessDino(img) });
             embedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
-            loadingBar.style.width = '50%';
+            loadingBar.style.width = '60%';
 
-            loadingText.textContent = 'Detecting faces... 50%';
+            loadingText.textContent = 'Detecting faces...';
             const detection = faceDetector.detect(img);
-
             if (detection.detections.length > 0) {
-                loadingText.textContent = 'Computing face embedding... 60%';
-                loadingBar.style.width = '60%';
-                const best = detection.detections.reduce((a, b) =>
-                    a.categories[0].score > b.categories[0].score ? a : b
-                );
-                const faceTensor = preprocessFace(img, best.boundingBox, img.width, img.height);
-                const faceResults = await faceNetSession.run({ input: faceTensor });
+                loadingText.textContent = 'Recognizing face...';
+                loadingBar.style.width = '80%';
+                const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
+                const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
                 facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
             }
-
-            loadingBar.style.width = '90%';
-            loadingText.textContent = facenetEmbedding ? 'Face found ✓ Searching...' : 'No face — DINO only. Searching...';
             URL.revokeObjectURL(img.src);
         }
 
-        // fetch is outside the if block — runs for date-only queries too
+        loadingText.textContent = 'Searching memories...';
+        loadingBar.style.width = '90%';
+
         const resp = await fetch('/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -186,546 +160,837 @@
         const data = await resp.json();
 
         loadingBar.style.width = '100%';
-        loadingText.textContent = `Done — ${data.images.length} results`;
-        setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 1000);
-
+        loadingText.textContent = `${data.images.length} memories found`;
+        setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 800);
         btn.disabled = false;
-        renderResults(data);
+
+        window.renderResults(data);
     });
-    function renderResults(data) {
-        const gallery = document.querySelector('.gallery');
-        gallery.innerHTML = '';
-        data.images.forEach((img, i) => {
-            const div = document.createElement('div');
-            div.className = 'photo' + (i === 0 ? ' active' : i === 1 ? ' next' : i === 2 ? ' next2' : '');
-            div.style.backgroundImage = `url('/files/${img.url}')`;
-            gallery.appendChild(div);
-        });
-        // re-init gallery controls and map markers
+
+    // ── FAVORITES ──
+    function getFavorites() {
+        try { return JSON.parse(localStorage.getItem('mem_favorites') || '[]'); }
+        catch { return []; }
     }
-</script>
+    function toggleFavorite(url) {
+        let favs = getFavorites();
+        if (favs.includes(url)) favs = favs.filter(u => u !== url);
+        else favs.push(url);
+        localStorage.setItem('mem_favorites', JSON.stringify(favs));
+        renderFavStrip();
+        return favs.includes(url);
+    }
+    window.toggleFavorite = toggleFavorite;
+    window.getFavorites = getFavorites;
 
-	<script src='https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/Leaflet.fullscreen.min.js'></script>
-	<link href='https://api.mapbox.com/mapbox.js/plugins/leaflet-fullscreen/v1.0.1/leaflet.fullscreen.css'
-		rel='stylesheet' />
-	<!-- <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.5.0/maptiler-sdk.umd.min.js"></script>
-    <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.5.0/maptiler-sdk.css" rel="stylesheet" />
-    <script src="https://cdn.maptiler.com/leaflet-maptilersdk/v4.1.0/leaflet-maptilersdk.umd.min.js"></script> -->
-    <script src="https://api.tiles.mapbox.com/mapbox.js/plugins/leaflet-markercluster/v0.4.0/leaflet.markercluster.js"></script>
-	<meta charset="utf-8">
-	<title>Image search</title>
-	<style>
-		html {
-			background: #151515 linear-gradient(101.54deg, #151515 0.61%, #1D1D1D 96.74%);
-			font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-			color: white;
-			padding: 0;
-			margin: 0;
-		}
+    // ── LIGHTBOX ──
+    let lightboxImages = [], lightboxIndex = 0;
 
-		body {
-            background: #111;
-            margin: 0;
+    function openLightbox(images, index) {
+        lightboxImages = images;
+        lightboxIndex = index;
+        updateLightbox();
+        document.getElementById('lightbox').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('open');
+        document.body.style.overflow = '';
+    }
+    function updateLightbox() {
+        const img = lightboxImages[lightboxIndex];
+        const url = img.url.replace(/^\//, '');
+        document.getElementById('lightbox-img').src = `/files/${url}`;
+        document.getElementById('lightbox-location').textContent = img.location || '';
+        document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
+        document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(url));
+    }
+
+    document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+    document.getElementById('lightbox-prev').addEventListener('click', () => { lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length; updateLightbox(); });
+    document.getElementById('lightbox-next').addEventListener('click', () => { lightboxIndex = (lightboxIndex + 1) % lightboxImages.length; updateLightbox(); });
+    document.getElementById('lightbox-fav').addEventListener('click', () => {
+        const url = lightboxImages[lightboxIndex].url.replace(/^\//, '');
+        document.getElementById('lightbox-fav').classList.toggle('active', toggleFavorite(url));
+    });
+    document.getElementById('lightbox').addEventListener('click', e => { if (e.target === document.getElementById('lightbox')) closeLightbox(); });
+    document.addEventListener('keydown', e => {
+        if (!document.getElementById('lightbox').classList.contains('open')) return;
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') { lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length; updateLightbox(); }
+        if (e.key === 'ArrowRight') { lightboxIndex = (lightboxIndex + 1) % lightboxImages.length; updateLightbox(); }
+    });
+
+    window.openLightbox = openLightbox;
+
+    // ── MAP ──
+    let leafletMap = null, markerClusters = null;
+
+    function initMap() {
+        if (leafletMap) return;
+        leafletMap = L.map('map').setView([48.505, 2.33], 3);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(leafletMap);
+    }
+
+    function updateMap(images) {
+        initMap();
+        if (markerClusters) leafletMap.removeLayer(markerClusters);
+        markerClusters = L.markerClusterGroup({ spiderfyOnMaxZoom: true, showCoverageOnHover: false });
+        const bounds = [];
+        images.forEach((img, i) => {
+            if (!img.lat) return;
+            const url = img.url.replace(/^\//, '');
+            const marker = L.marker([img.lat, img.lon]);
+            marker.bindPopup(`<img src="/files/${url}" style="width:120px;height:80px;object-fit:cover;border-radius:6px;"><br><small>${img.location||''}</small>`);
+            marker.on('click', () => openLightbox(images, i));
+            markerClusters.addLayer(marker);
+            bounds.push([img.lat, img.lon]);
+        });
+        leafletMap.addLayer(markerClusters);
+        if (bounds.length > 0) leafletMap.fitBounds(bounds, { padding: [20, 20] });
+    }
+
+    // ── RENDER ──
+    window.currentImages = [];
+
+    window.renderResults = function(data) {
+        window.currentImages = data.images;
+        const grid = document.getElementById('photo-grid');
+        grid.innerHTML = '';
+        const favs = getFavorites();
+
+        data.images.forEach((img, i) => {
+            const url = img.url.replace(/^\//, '');
+            const fileUrl = `/files/${url}`;
+            const isFav = favs.includes(url);
+
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.innerHTML = `
+                <div class="grid-thumb" style="background-image:url('${fileUrl}')">
+                    <div class="grid-overlay">
+                        <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
+                        <button class="thumb-btn thumb-delete" title="Delete">✕</button>
+                    </div>
+                    <div class="grid-score">${img.score.toFixed(2)}</div>
+                </div>
+            `;
+            cell.querySelector('.grid-thumb').addEventListener('click', e => {
+                if (e.target.closest('.thumb-btn')) return;
+                openLightbox(data.images, i);
+            });
+            cell.querySelector('.thumb-fav').addEventListener('click', e => {
+                e.stopPropagation();
+                const isFav = toggleFavorite(url);
+                e.target.classList.toggle('fav-active', isFav);
+            });
+            cell.querySelector('.thumb-delete').addEventListener('click', async e => {
+                e.stopPropagation();
+                if (!confirm('Delete this photo?')) return;
+                const fd = new FormData();
+                fd.append('image_paths', url);
+                await fetch('/delete_photo', { method: 'POST', body: fd });
+                cell.style.opacity = '0';
+                cell.style.transform = 'scale(0.85)';
+                setTimeout(() => cell.remove(), 300);
+            });
+            grid.appendChild(cell);
+        });
+
+        // staggered appear animation
+        requestAnimationFrame(() => {
+            grid.querySelectorAll('.grid-cell').forEach((el, i) => {
+                el.style.transitionDelay = `${Math.min(i * 25, 600)}ms`;
+                el.classList.add('appear');
+            });
+        });
+
+        document.getElementById('result-count').textContent = `${data.images.length} photos`;
+        document.getElementById('toolbar-info').textContent = `${data.images.length} results`;
+
+        updateMap(data.images);
+
+        document.getElementById('empty-state').style.display = 'none';
+        document.getElementById('results-area').style.display = 'grid';
+
+        // if in gallery view, rebuild
+        if (window.currentView === 'gallery') buildGallery(data.images, 0);
+    };
+
+    // init favorites strip
+    function renderFavStrip() {
+        const strip = document.getElementById('fav-strip');
+        strip.innerHTML = '';
+        const favs = getFavorites();
+        if (favs.length === 0) {
+            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
+            return;
         }
+        favs.slice(0, 16).forEach(url => {
+            const el = document.createElement('div');
+            el.className = 'fav-thumb';
+            el.style.backgroundImage = `url('/files/${url}')`;
+            el.title = url.split('/').pop();
+            el.addEventListener('click', () => {
+                const images = window.currentImages || [];
+                const i = images.findIndex(img => img.url.replace(/^\//, '') === url);
+                if (i >= 0) openLightbox(images, i);
+            });
+            strip.appendChild(el);
+        });
+    }
 
-        .gallery {
-            flex: 1 1 40%; /* take half the width */
-            min-width: 300px; /* ensure it doesn’t shrink too much */
-            height: 400px;
-            position: relative; /* needed for absolute controls */
-            box-sizing: border-box;
-        }
+    renderFavStrip();
 
-        /*.photo-selection {*/
-        /*    position: absolute;*/
-        /*    bottom: 10px; !* Adjust as needed to position it above the controls *!*/
-        /*    left: 50%;*/
-        /*    transform: translateX(-50%);*/
-        /*    background: rgba(0, 0, 0, 0.6); !* Semi-transparent background for readability *!*/
-        /*    padding: 5px 10px;*/
-        /*    border-radius: 5px;*/
-        /*    display: flex;*/
-        /*    align-items: center;*/
-        /*    gap: 8px; !* Space between checkbox and label *!*/
-        /*    z-index: 4; !* Ensure it's above other photo layers but below controls *!*/
-        /*    opacity: 0; !* Start hidden *!*/
-        /*    transition: opacity 0.3s ease-in-out;*/
-        /*}*/
+    // init with server-rendered data if any
+    {% if images %}
+    const serverImages = {{ images | tojson }};
+    if (serverImages.length > 0) window.renderResults({ images: serverImages });
+    {% endif %}
 
-        .photo {
-            position: absolute;
-            top: 0;
-            left: 50%;
-            width: 50%; /* maybe reduce to 50% */
+    </script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
             height: 100%;
-            transform: translateX(-50%);
+            font-family: -apple-system, 'Helvetica Neue', sans-serif;
+            background: #f0f0f0;
+            color: #1c1c1e;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            width: 260px;
+            background: rgba(255,255,255,0.88);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-right: 1px solid rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 20px 18px 16px;
+            border-bottom: 1px solid rgba(0,0,0,0.07);
+        }
+
+        .sidebar-title {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.6px;
+            margin-bottom: 16px;
+        }
+
+        .search-form { display: flex; flex-direction: column; gap: 9px; }
+
+        .file-upload-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 12px;
+            background: #f2f2f7;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #3c3c43;
+            transition: background 0.15s;
+            user-select: none;
+        }
+        .file-upload-label:hover { background: #e5e5ea; }
+        .file-upload-label input { display: none; }
+
+        .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        .field-group { display: flex; flex-direction: column; gap: 3px; }
+
+        .field-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #8e8e93;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .field-input {
+            padding: 8px 10px;
+            background: #f2f2f7;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #1c1c1e;
+            outline: none;
+            width: 100%;
+            font-family: inherit;
+        }
+        .field-input:focus { background: #e8e8ed; }
+
+        .search-btn {
+            padding: 11px;
+            background: #007aff;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.1s;
+            font-family: inherit;
+        }
+        .search-btn:hover { background: #0066d6; }
+        .search-btn:active { transform: scale(0.98); }
+        .search-btn:disabled { background: #c7c7cc; cursor: not-allowed; }
+
+        .sidebar-stats {
+            padding: 10px 18px;
+            border-bottom: 1px solid rgba(0,0,0,0.07);
+            font-size: 12px;
+            color: #8e8e93;
+            display: flex;
+            justify-content: space-between;
+        }
+        #result-count { font-weight: 600; color: #007aff; }
+
+        .sidebar-section {
+            padding: 14px 18px;
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #8e8e93;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
+        .fav-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .fav-thumb {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
             background-size: cover;
             background-position: center;
-            border-radius: 16px;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
-            transition: transform 0.6s, z-index 0.6s, opacity 0.6s;
-            opacity: 0;
-        }
-
-        .photo.active {
-            transform: translateX(-50%) scale(1);
-            z-index: 3;
-            opacity: 1;
-        }
-
-        .photo.prev {
-            transform: translateX(-150%) scale(0.8) rotateY(20deg);
-            z-index: 2;
-            opacity: 0.7;
-        }
-
-        .photo.next {
-            transform: translateX(50%) scale(0.8) rotateY(-20deg);
-            z-index: 2;
-            opacity: 0.7;
-        }
-
-        .photo.prev2 {
-            transform: translateX(-250%) scale(0.6) rotateY(40deg);
-            z-index: 1;
-            opacity: 0.4;
-        }
-
-        .photo.next2 {
-            transform: translateX(150%) scale(0.6) rotateY(-40deg);
-            z-index: 1;
-            opacity: 0.4;
-        }
-
-        .content {
-            display: flex;
-            gap: 24px;
-            padding: 24px;
-            flex-wrap: wrap; /* stack on small screens */
-        }
-
-        .controls {
-            position: absolute;
-            bottom: -120px;
-            width: 100%;
-            text-align: center;
-            z-index: 10; /* make sure it’s above photos */
-        }
-
-        .controls button {
-            background: rgba(255, 255, 255, 0.8);
-            border: none;
-            padding: 10px 20px;
-            margin: 0 10px;
-            font-size: 16px;
-            border-radius: 8px;
             cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .fav-thumb:hover { transform: scale(1.06); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+
+        /* ── MAIN ── */
+        .main {
+            margin-left: 260px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ── TOOLBAR ── */
+        .toolbar {
+            background: rgba(255,255,255,0.88);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 44px;
+        }
+
+        .view-toggle {
+            display: flex;
+            background: rgba(116,116,128,0.12);
+            border-radius: 8px;
+            padding: 2px;
+        }
+
+        .view-btn {
+            padding: 5px 12px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            color: #3c3c43;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+        .view-btn.active {
+            background: white;
+            color: #1c1c1e;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.14);
+        }
+
+        .toolbar-spacer { flex: 1; }
+        .toolbar-info { font-size: 12px; color: #8e8e93; }
+
+        /* ── SPLIT ── */
+        .content-split {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            overflow: hidden;
+        }
+
+        /* ── GRID ── */
+        .grid-pane {
+            overflow-y: auto;
+            padding: 12px;
+            background: #f0f0f0;
+        }
+        .grid-pane::-webkit-scrollbar { width: 6px; }
+        .grid-pane::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+
+        #photo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 3px;
+        }
+
+        .grid-cell {
+            aspect-ratio: 1;
+            opacity: 0;
+            transform: scale(0.94);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .grid-cell.appear { opacity: 1; transform: scale(1); }
+
+        .grid-thumb {
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        .grid-thumb:hover .grid-overlay { opacity: 1; }
+
+        .grid-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(160deg, rgba(0,0,0,0.35) 0%, transparent 45%);
+            opacity: 0;
+            transition: opacity 0.18s;
+            padding: 7px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .thumb-btn {
+            border: none;
+            background: rgba(0,0,0,0.35);
+            backdrop-filter: blur(6px);
+            color: white;
+            border-radius: 50%;
+            width: 26px; height: 26px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 11px;
+            transition: background 0.15s, transform 0.1s;
+        }
+        .thumb-btn:hover { transform: scale(1.15); }
+        .thumb-fav.fav-active { color: #ff3b30; }
+        .thumb-delete:hover { background: rgba(255,59,48,0.5); }
+
+        .grid-score {
+            position: absolute;
+            bottom: 5px; right: 6px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.6);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── MAP ── */
+        .map-pane {
+            border-left: 1px solid rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        #map { width: 100%; height: 100%; }
+
+        /* ── GALLERY ── */
+        .gallery-pane {
+            flex: 1;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            background: #1c1c1e;
+        }
+        .gallery-pane.active { display: flex; }
+
+        .gallery-main {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gallery-photo {
+            position: absolute;
+            inset: 0;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+        .gallery-photo.active { opacity: 1; }
+
+        .gallery-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
             z-index: 10;
         }
 
-        #map-container {
-            flex: 1 1 50%;
-            min-width: 300px;
-            height: 400px; /* same height as gallery */
-            padding-left: 36px;
-        }
-
-        .photo-selection {
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 2; /* above the photo-link */
-            background: rgba(0, 0, 0, 0.6);
-            padding: 5px 10px;
-            border-radius: 5px;
-        }
-        .photo-selection input[type="checkbox"] {
-            /* Basic styling for the checkbox itself */
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: #fcff74; /* Highlight color for the checkbox */
-        }
-
-        .photo-selection label {
+        .gallery-btn {
+            padding: 9px 18px;
+            background: rgba(255,255,255,0.12);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.18);
             color: white;
-            font-size: 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-family: inherit;
             cursor: pointer;
-            user-select: none; /* Prevent text selection on label */
+            transition: background 0.15s;
+        }
+        .gallery-btn:hover { background: rgba(255,255,255,0.22); }
+
+        .gallery-strip {
+            height: 76px;
+            background: #2c2c2e;
+            display: flex;
+            gap: 3px;
+            padding: 6px 10px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            align-items: center;
+        }
+        .gallery-strip::-webkit-scrollbar { display: none; }
+
+        .strip-thumb {
+            flex-shrink: 0;
+            width: 60px; height: 60px;
+            border-radius: 6px;
+            background-size: cover;
+            background-position: center;
+            cursor: pointer;
+            border: 2px solid transparent;
+            opacity: 0.55;
+            transition: opacity 0.15s, border-color 0.15s;
+        }
+        .strip-thumb.active { border-color: #007aff; opacity: 1; }
+        .strip-thumb:hover { opacity: 0.85; }
+
+        /* ── EMPTY ── */
+        #empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #8e8e93;
+            gap: 10px;
+        }
+        .empty-icon { font-size: 52px; opacity: 0.35; }
+        .empty-text { font-size: 17px; font-weight: 500; color: #3c3c43; }
+        .empty-sub { font-size: 13px; }
+        #results-area { display: none; }
+
+        /* ── LIGHTBOX ── */
+        #lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.94);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        #lightbox.open { display: flex; }
+
+        .lightbox-content {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            max-width: 90vw;
+            max-height: 92vh;
         }
 
-        .photo-link {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1; /* under the checkbox */
-        }
-        /* Optional: Style for the delete button to make it more prominent */
-        #deleteButton {
-            background: #fcff74;
-            color: #000;
-            font-weight: bold;
-            border: none;
-            padding: 12px 24px;
+        #lightbox-img {
+            max-width: 86vw;
+            max-height: 82vh;
+            object-fit: contain;
             border-radius: 8px;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.7);
+        }
+
+        .lightbox-meta {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            color: rgba(255,255,255,0.65);
+            font-size: 13px;
+        }
+
+        .lb-nav {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px; height: 44px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
             cursor: pointer;
-            box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.3);
-            margin: 24px auto; /* Center it below the gallery/map */
-            display: block; /* Make it a block element to center with margin: auto */
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.15s;
+        }
+        .lb-nav:hover { background: rgba(255,255,255,0.2); }
+        #lightbox-prev { left: 16px; }
+        #lightbox-next { right: 16px; }
+
+        .lightbox-actions {
+            position: fixed;
+            top: 14px; right: 14px;
+            display: flex; gap: 8px;
         }
 
-        #deleteButton:hover {
-            background: #f2f24a;
+        .lb-action {
+            padding: 7px 14px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 20px;
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s;
         }
+        .lb-action:hover { background: rgba(255,255,255,0.18); }
+        #lightbox-fav.active { color: #ff3b30; }
 
-		.container {
-            display: grid;
-            grid-template-columns: 1fr 1fr; /* two equal columns */
-            gap: 24px;
-            max-width: 1240px;
-            margin: 0 auto;
-            padding: 0 24px;
+        /* ── LOADING ── */
+        #loading-container {
+            position: fixed;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(28,28,30,0.92);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 12px 18px;
+            width: 260px;
+            z-index: 2000;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
-
-		.title-area {
-			background: linear-gradient(180deg, #212121 0%, #1D1D1D 100%);
-			border-bottom: 1px solid #282828;
-		}
-
-		.title-area .container {
-			flex-direction: row;
-			justify-content: space-between;
-			align-items: center;
-			padding: 16px 24px;
-		}
-
-		.title-area svg {
-			width: 200px;
-		}
-
-		.title-area h2 {
-			font-size: 20px;
-			font-weight: 400;
-			margin-top: 0;
-		}
-
-		.title-area h2 em {
-			color: #fcff74;
-			font-style: normal;
-		}
-
-		.title-area .results-grid {
-			display: flex;
-
-			font-family: 'Courier New', Courier, monospace;
-			font-size: 16px;
-			font-weight: 500;
-		}
-
-		.title-area .results-grid .key {
-			padding: 4px 12px;
-			border: #313131 1px solid;
-			background: #282828;
-			width: 256px;
-		}
-
-        .images-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr); /* two images per row */
-            gap: 24px;
+        #loading-text {
+            color: rgba(255,255,255,0.88);
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 7px;
         }
-
-		.title-area .results-grid .value {
-			padding: 4px 12px;
-			border: #313131 1px solid;
-			background: #282828;
-			width: 140px;
-			color: #fcff74;
-		}
-
-		#map {
-			height: 400px;
-            z-index: 5;
-			/* Set the height of the map */
-			/* width: 50% ;   Allow the map to take the full width of the cell */
-		}
-
-		/* td#map {
-				padding: 0; /* Remove any padding from the <td> */
-		/* } */
-		.grid {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 24px;
-			padding: 42px 0;
-		}
-
-		.grid-item {
-			/* padding: 16px 24px; */
-			max-width: 240px;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			text-align: center;
-			border-radius: 8px;
-			border: 1px solid #414141;
-			box-shadow: 0px 4px 4px rgba(0, 0, 0, .06), inset 0px 4px 25px rgba(0, 0, 0, .14);
-		}
-
-		.grid-item img {
-			width: 250px;
-			height: 250px;
-			object-fit: cover;
-			border-radius: 4px;
-		}
-
-		.grid-item p {
-			margin: 16px 0 0;
-		}
-
-		.grid-item em {
-			color: #fcff74;
-			font-style: normal;
-			font-family: 'Courier New', Courier, monospace;
-			font-weight: bold;
-			font-size: 13px;
-			display: block;
-			padding-bottom: 8px;
-		}
-
-		.grid-item:hover {
-			transform: translateY(-1px);
-			background: #212121;
-			transition: all 400ms cubic-bezier(0.03, 0.98, 0.52, 0.99) 0s;
-			cursor: pointer;
-		}
-
-		footer {
-			font-size: 14px;
-			text-align: center;
-			color: #606060;
-			border-top: 1px solid #212121;
-			padding: 24px 0 42px;
-		}
-
-		@media screen and (max-width: 824px) {
-			.title-area .container {
-				flex-direction: column;
-				max-width: 98%;
-				text-align: center;
-			}
-
-			.title-area .results-grid {
-				max-width: 94%;
-				margin: 0 auto;
-				text-align: left;
-			}
-
-			.title-area .results-grid .key {
-				white-space: nowrap;
-				overflow: hidden;
-				text-overflow: ellipsis;
-			}
-		}
-
-		@media screen and (max-width: 520px) {
-			.grid-item {
-				max-width: 98%;
-				margin: 0 auto;
-			}
-		}
-
-		table {
-			width: 100%;
-			table-layout: fixed;
-			border-collapse: separate;
-			border-spacing: 24px;
-			/* This adds spacing between your td blocks */
-		}
-
-		td {
-			padding: 24px;
-			vertical-align: top;
-		}
-	</style>
-
+        .loading-track {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            height: 3px;
+            overflow: hidden;
+        }
+        #loading-bar {
+            background: #007aff;
+            height: 3px;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
 </head>
-
 <body>
-	<header class='title-area'>
-		<div class='container'>
-            {% if source_image %}
-				<div class="grid-item">
-					<h2>Results for:</h2>
-                    <!--					<img src="{{ url_for('serve_file', filename=source_image) }}" /> -->
-                    <img src="{{ url_for('serve_file', filename=source_image) }}"/>
-				</div>
-            {% elif start_date %}
-            <div class="grid-item">
-                <h2>Results for memory from {{start_date}}</h2>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-title">Memories</div>
+        <form name="input" class="search-form" enctype="multipart/form-data">
+            <label class="file-upload-label">
+                <span>🖼</span>
+                <span id="file-label-text">Search by photo</span>
+                <input accept="image/*" id="image-in" name="image" type="file">
+            </label>
+            <div class="date-row">
+                <div class="field-group">
+                    <span class="field-label">From</span>
+                    <input class="field-input" id="start-date" name="start_date" type="date">
+                </div>
+                <div class="field-group">
+                    <span class="field-label">To</span>
+                    <input class="field-input" id="end-date" name="end_date" type="date">
+                </div>
             </div>
-            {% else %}
-            <div class="grid-item">
-                <h2>Look for your memories!</h2>
-            </div>
-            {% endif %}
-            <!--			</div>-->
-			<div class='section'>
-    
-				<form name="input" action="/" method="post" enctype="multipart/form-data">
-                    <input accept="image/*" id="image-in" name="image" type="file"><br><br>
+            <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
+            <button class="search-btn" name="forwardBtn" type="submit">Search</button>
+        </form>
+    </div>
 
-                    <label for="start-date">Start Date:</label>
-                    <input id="start-date" name="start_date" type="date"><br><br>
+    <div class="sidebar-stats">
+        <span id="result-count">No results yet</span>
+        <span>{{ gen_time }}s · {{ query_time }}s</span>
+    </div>
 
-                    <label for="end-date">End Date:</label>
-                    <input id="end-date" name="end_date" type="date"><br><br>
-                    <input id="limit" name="limit" placeholder="How many photos / days?" type="text"><br><br>
-
-                    <button name="forwardBtn" type="submit">Look up</button>
-				</form>
-				<br>
-				<div class='results-grid'>
-					<div class='key'>Table:</div>
-					<div class='value'>{{ table }}</div>
-				</div>
-				<div class='results-grid'>
-					<div class='key'>Feature Generation time:</div>
-					<div class='value'>{{ gen_time }} sec</div>
-				</div>
-				<div class='results-grid'>
-					<div class='key'>Query time:</div>
-					<div class='value'>{{ query_time }} sec</div>
-				</div>
-			</div>
-		</div>
-            <div id="loading-container" style="
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: #212121; border: 1px solid #414141; border-radius: 8px;
-    padding: 12px 24px; width: 300px; z-index: 1000;">
-    <div id="loading-text" style="color: #fcff74; font-size: 13px; margin-bottom: 8px; font-family: monospace;"></div>
-    <div style="background: #414141; border-radius: 4px; height: 6px;">
-        <div id="loading-bar" style="
-            background: #fcff74; height: 6px; border-radius: 4px;
-            width: 0%; transition: width 0.4s ease;"></div>
+    <div class="sidebar-section">
+        <div class="section-title">Favorites</div>
+        <div class="fav-strip" id="fav-strip"></div>
     </div>
 </div>
-	</header>
-    <div class='container'>
 
-        <!-- FIRST COLUMN: The form containing the gallery and delete button -->
-        <form action="{{ url_for('delete_photo') }}" class="grid-form" method="POST">
-            <div class="gallery">
-                {% for image in images %}
-                <div class="photo
-                    {% if loop.index0 == 0 %}active
-                    {% elif loop.index0 == 1 %}next
-                    {% elif loop.index0 == 2 %}next2
-                    {% elif loop.revindex0 == 0 %}prev
-                    {% elif loop.revindex0 == 1 %}prev2{% endif %}"
-                     style="background-image: url('{{ url_for('serve_file', filename=image.url) }}');">
-                    <a class="photo-link" href="{{ url_for('serve_file', filename=image.url) }}" target="_blank"></a>
-                    <div class="photo-selection">
-                        <input id="checkbox-{{ loop.index }}" name="image_paths" type="checkbox"
-                               value="{{ image.url }}">
-                        <label for="checkbox-{{ loop.index }}">Bad photo?</label>
-                    </div>
-                </div>
+<!-- MAIN -->
+<div class="main">
+    <div class="toolbar">
+        <div class="view-toggle">
+            <button class="view-btn active" id="btn-grid" onclick="setView('grid')">⊞ Grid</button>
+            <button class="view-btn" id="btn-gallery" onclick="setView('gallery')">▷ Gallery</button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <div class="toolbar-info" id="toolbar-info"></div>
+    </div>
 
-
-                {% endfor %}
-                {% if images %}
-                <div class="controls">
-                    <button id="prevBtn" type="button">Prev</button>
-                    <button id="nextBtn" type="button">Next</button>
-                </div>
-                {% endif %}
-                <script>
-                    const photos = document.querySelectorAll('.photo');
-                    let activeIndex = 0;
-
-                    function updateGallery() {
-                        photos.forEach((photo, i) => {
-                            photo.className = 'photo';
-                            if (i === activeIndex) photo.classList.add('active');
-                            else if (i === activeIndex - 1) photo.classList.add('prev');
-                            else if (i === activeIndex - 2) photo.classList.add('prev2');
-                            else if (i === activeIndex + 1) photo.classList.add('next');
-                            else if (i === activeIndex + 2) photo.classList.add('next2');
-                        });
-                    }
-
-                    document.getElementById('prevBtn').addEventListener('click', () => {
-                        activeIndex = (activeIndex - 1 + photos.length) % photos.length;
-                        updateGallery();
-                    });
-
-                    document.getElementById('nextBtn').addEventListener('click', () => {
-                        activeIndex = (activeIndex + 1) % photos.length;
-                        updateGallery();
-                    });
-
-                    updateGallery();
-                </script>
-            </div>
-            {% if images %}
-            <button id="deleteButton" type="submit">Delete Selected</button>
-            {% endif %}
-        </form>
-
-        <!-- SECOND COLUMN: The map container -->
-        <div id="map-container">
-            <div id="map">
-            </div>
-            <script>
-                {%
-                    if images 
-                %}
-                var clusters = L.markerClusterGroup({
-                    spiderfyOnMaxZoom: true,
-                    showCoverageOnHover: false,
-                    zoomToBoundsOnClick: true
-                });
-                const map = L.map('map', {fullscreenControl: true}).setView([48.505, 2.33], 3);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 16,
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(map);
-                const imagesData = {
-                {
-                    images | tojson
-                }
-                }
-                ;
-                imagesData.forEach(image => {
-                    if (image.lat) {
-
-                        const marker = L.marker([image.lat, image.lon]);
-                        clusters.addLayer(marker);
-                        marker.bindPopup(`<img src="{{ url_for('serve_file', filename='') }}${image.url}" style="width:150px; height:auto;">`);
-                    }
-                });
-                clusters.addTo(map);
-                {%
-                    endif 
-                %}
-            </script>
+    <div class="content-split" id="results-area">
+        <div class="grid-pane">
+            <div id="photo-grid"></div>
+        </div>
+        <div class="map-pane">
+            <div id="map"></div>
         </div>
     </div>
 
-    <script>
-        const selectAll = document.getElementById('select-all');
-        if (selectAll) {
-            const checkboxes = document.querySelectorAll("input[name='image_paths']");
-            selectAll.addEventListener('change', () => {
-                checkboxes.forEach(cb => cb.checked = selectAll.checked);
-            });
-        }
-    </script>
+    <div id="empty-state">
+        <div class="empty-icon">📷</div>
+        <div class="empty-text">Find your memories</div>
+        <div class="empty-sub">Search by photo similarity or date range</div>
+    </div>
 
+    <div class="gallery-pane" id="gallery-pane">
+        <div class="gallery-main" id="gallery-main">
+            <div class="gallery-controls">
+                <button class="gallery-btn" id="gallery-prev">← Prev</button>
+                <button class="gallery-btn" id="gallery-next">Next →</button>
+            </div>
+        </div>
+        <div class="gallery-strip" id="gallery-strip"></div>
+    </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox">
+    <button class="lb-nav" id="lightbox-prev">‹</button>
+    <div class="lightbox-content">
+        <img id="lightbox-img" src="" alt="">
+        <div class="lightbox-meta">
+            <span id="lightbox-counter"></span>
+            <span id="lightbox-location"></span>
+        </div>
+    </div>
+    <button class="lb-nav" id="lightbox-next">›</button>
+    <div class="lightbox-actions">
+        <button class="lb-action" id="lightbox-fav">♥ Favorite</button>
+        <button class="lb-action" id="lightbox-close">✕</button>
+    </div>
+</div>
+
+<!-- LOADING -->
+<div id="loading-container" style="display:none">
+    <div id="loading-text">Loading...</div>
+    <div class="loading-track"><div id="loading-bar"></div></div>
+</div>
+
+<script>
+window.currentImages = [];
+window.currentView = 'grid';
+
+function setView(view) {
+    window.currentView = view;
+    document.getElementById('btn-grid').classList.toggle('active', view === 'grid');
+    document.getElementById('btn-gallery').classList.toggle('active', view === 'gallery');
+    document.getElementById('results-area').style.display = view === 'grid' ? 'grid' : 'none';
+    const gp = document.getElementById('gallery-pane');
+    if (view === 'gallery') {
+        gp.classList.add('active');
+        if (window.currentImages.length > 0) buildGallery(window.currentImages, 0);
+    } else {
+        gp.classList.remove('active');
+    }
+}
+
+let galleryIndex = 0;
+
+function buildGallery(images, startIndex) {
+    const main = document.getElementById('gallery-main');
+    const strip = document.getElementById('gallery-strip');
+    main.querySelectorAll('.gallery-photo').forEach(el => el.remove());
+    strip.innerHTML = '';
+    galleryIndex = startIndex;
+
+    images.forEach((img, i) => {
+        const url = img.url.replace(/^\//, '');
+        const photo = document.createElement('div');
+        photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
+        photo.style.backgroundImage = `url('/files/${url}')`;
+        main.insertBefore(photo, main.querySelector('.gallery-controls'));
+
+        const thumb = document.createElement('div');
+        thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
+        thumb.style.backgroundImage = `url('/files/${url}')`;
+        thumb.addEventListener('click', () => setGalleryIndex(i));
+        strip.appendChild(thumb);
+    });
+}
+
+function setGalleryIndex(i) {
+    document.querySelectorAll('.gallery-photo').forEach((p, idx) => p.classList.toggle('active', idx === i));
+    document.querySelectorAll('.strip-thumb').forEach((t, idx) => t.classList.toggle('active', idx === i));
+    galleryIndex = i;
+    document.querySelectorAll('.strip-thumb')[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+
+document.getElementById('gallery-prev').addEventListener('click', () => {
+    const len = window.currentImages.length;
+    if (len) setGalleryIndex((galleryIndex - 1 + len) % len);
+});
+document.getElementById('gallery-next').addEventListener('click', () => {
+    const len = window.currentImages.length;
+    if (len) setGalleryIndex((galleryIndex + 1) % len);
+});
+
+document.getElementById('image-in').addEventListener('change', e => {
+    document.getElementById('file-label-text').textContent = e.target.files[0]?.name || 'Search by photo';
+});
+</script>
 </body>
-
 </html>
