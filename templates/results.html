@@ -20,7 +20,7 @@
         loadingBar.style.width = '30%';
         document.querySelector('button[name="forwardBtn"]').disabled = true;
 
-        const session = await InferenceSession.create('/models/dino_vitb16.onnx');
+        const session = await InferenceSession.create('/models/dino_vitb16_inline.onnx');
         
 
         // re-enable once ready
