@@ -11,22 +11,24 @@
     <script src="https://unpkg.com/leaflet.fullscreen/leaflet.fullscreen.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs/dist/tf.min.js"> </script>
     <script type="module">
-        import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js';
+        import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.js';
 
         const loadingBar = document.getElementById('loading-bar');
         const loadingText = document.getElementById('loading-text');
 
         loadingText.textContent = 'Loading model...';
         loadingBar.style.width = '30%';
+        document.querySelector('button[name="forwardBtn"]').disabled = true;
 
         const session = await ort.InferenceSession.create('/models/dino_vitb16.onnx');
 
+        // re-enable once ready
+        document.querySelector('button[name="forwardBtn"]').disabled = false;
         loadingBar.style.width = '100%';
         loadingText.textContent = 'Model ready';
         setTimeout(() => {
             document.getElementById('loading-container').style.display = 'none';
         }, 800);
-
         function preprocessImage(imgFile) {
             return new Promise((resolve) => {
                 const img = new Image();
