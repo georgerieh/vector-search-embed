@@ -39,8 +39,31 @@
 
     loadingText.textContent = 'Loading DINO... 0%';
     requestAnimationFrame(() => updatePercent(45, 'Loading DINO...'));
-    const dinoSession = await InferenceSession.create('/models/dino_vitb16_quantized.onnx');
+    let dinoSession = null;
 
+    async function loadModel() {
+        // 1. KILL the old leak before starting a new one
+        if (dinoSession) {
+            console.log("Releasing previous session...");
+            await dinoSession.release(); 
+            dinoSession = null;
+        }
+
+        try {
+            // 2. Load the new session
+            dinoSession = await ort.InferenceSession.create('/models/dino_vitb16_quantized.onnx', {
+                executionProviders: ['webgpu', 'wasm'],
+                preferredOutputLocation: 'gpu-buffer',
+                // OPTIONAL: Speed up WASM if WebGPU fails
+                executionParameters: {
+                    cpuset: '0-3' // Helps on Android to prevent overheating
+                }
+            });
+            console.log("DINO Model loaded successfully!");
+        } catch (e) {
+            console.error("Failed to load model:", e);
+        }
+    }
     animDone = true;
     loadingBar.style.width = '50%';
     animDone = false;
