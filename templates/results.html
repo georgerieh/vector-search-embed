@@ -39,7 +39,7 @@
 
     loadingText.textContent = 'Loading DINO... 0%';
     requestAnimationFrame(() => updatePercent(45, 'Loading DINO...'));
-    const dinoSession = await InferenceSession.create('/models/dino_vitb16_inline.onnx');
+    const dinoSession = await InferenceSession.create('/models/dino_vitb16_quantized.onnx');
 
     animDone = true;
     loadingBar.style.width = '50%';
