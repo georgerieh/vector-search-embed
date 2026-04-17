@@ -133,19 +133,13 @@
 
     // --- submit handler ---
 
-    let embeddingReady = false;
-
     document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
-        if (embeddingReady) return;
-        e.preventDefault();
+            const fileInput = document.getElementById('image-in');
 
-        const fileInput = document.getElementById('image-in');
-        if (fileInput.files.length === 0) {
-            // no image — allow date-only submit
-            embeddingReady = true;
-            e.target.submit();
-            return;
-        }
+            if (fileInput.files.length === 0) return;
+            if (document.getElementById('embedding-input').value) return;
+
+            e.preventDefault();
 
         document.getElementById('loading-container').style.display = 'block';
         loadingBar.style.width = '0%';
@@ -187,8 +181,7 @@
         loadingText.textContent = faceEmbedding ? 'Face found ✓ Done!' : 'No face detected — DINO only';
 
         URL.revokeObjectURL(img.src);
-        embeddingReady = true;
-        setTimeout(() => e.target.submit(), 400); // short delay so user sees status
+        e.target.submit();
     });
 </script>
     <!--	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"-->
