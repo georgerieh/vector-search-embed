@@ -404,7 +404,14 @@
         }
         .file-upload-label:hover { background: #e5e5ea; }
         .file-upload-label input { display: none; }
-
+        .spinner {
+            width: 28px; height: 28px;
+            border: 3px solid #e5e5ea;
+            border-top-color: #007aff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
         .field-group { display: flex; flex-direction: column; gap: 3px; }
@@ -541,18 +548,41 @@
 
         /* ── SPLIT ── */
         .content-split {
-            flex: 1;
-            display: grid;
-            grid-template-columns: 1fr 320px;
-            overflow: hidden;
-        }
+        flex: 1;
+        display: flex;      /* change from grid to flex */
+        overflow: hidden;
+    }
 
-        /* ── GRID ── */
-        .grid-pane {
-            overflow-y: auto;
-            padding: 12px;
-            background: #f0f0f0;
-        }
+    .grid-pane {
+        flex: 1;
+        min-width: 200px;
+        overflow-y: auto;
+        padding: 12px;
+        background: #f0f0f0;
+    }
+
+    .map-pane {
+        width: 320px;
+        min-width: 100px;
+        max-width: 70%;
+        border-left: 1px solid rgba(0,0,0,0.08);
+        overflow: hidden;
+        position: relative;
+    }
+
+    /* drag handle */
+    .resize-handle {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.15s;
+    z-index: 10;
+}
+.resize-handle:hover, .resize-handle.dragging {
+    background: rgba(0,122,255,0.4);
+}
         .grid-pane::-webkit-scrollbar { width: 6px; }
         .grid-pane::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
 
@@ -618,11 +648,6 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* ── MAP ── */
-        .map-pane {
-            border-left: 1px solid rgba(0,0,0,0.08);
-            overflow: hidden;
-        }
         #map { width: 100%; height: 100%; }
 
         /* ── GALLERY ── */
@@ -857,6 +882,16 @@
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
         </form>
+        <div id="ref-preview" style="display:none; margin-top:4px;">
+        <img id="ref-img" style="
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,0.08);
+        ">
+        <div id="ref-label" style="font-size:11px;color:#8e8e93;margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+</div>
     </div>
 
     <div class="sidebar-stats">
@@ -874,24 +909,257 @@
 <div class="main">
     <div class="toolbar">
         <div class="view-toggle">
-            <button class="view-btn active" id="btn-grid" onclick="setView('grid')">⊞ Grid</button>
-            <button class="view-btn" id="btn-gallery" onclick="setView('gallery')">▷ Gallery</button>
+            <button class="view-btn active" id="btn-grid" onclick="setView('grid')">Grid</button>
+            <button class="view-btn" id="btn-gallery" onclick="setView('gallery')">Gallery</button>
+            <button class="view-btn" id="btn-info" onclick="setView('info')">Stats!</button>
+            <button class="view-btn" id="btn-memory" onclick="setView('memory')">Memory</button>
         </div>
         <div class="toolbar-spacer"></div>
         <div class="toolbar-info" id="toolbar-info"></div>
     </div>
-
     <div class="content-split" id="results-area">
         <div class="grid-pane">
             <div id="photo-grid"></div>
         </div>
         <div class="map-pane">
+            <div class="resize-handle" id="resize-handle"></div>
             <div id="map"></div>
         </div>
+        <div id="memory-pane" style="display:none; flex:1; overflow-y:auto; background:#f2f2f7;">
+
+    <div id="memory-loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#8e8e93; gap:12px;">
+        <div class="spinner"></div>
+        <div style="font-size:14px">Finding a memory...</div>
     </div>
 
+    <div id="memory-content" style="display:none; padding:24px;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+            <div>
+                <div id="memory-title" style="font-size:26px; font-weight:700; letter-spacing:-0.6px;"></div>
+                <div id="memory-subtitle" style="font-size:13px; color:#8e8e93; margin-top:4px;"></div>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button id="memory-save-btn" style="
+                    padding:9px 18px;
+                    background:#007aff;
+                    color:white;
+                    border:none;
+                    border-radius:10px;
+                    font-size:13px;
+                    font-weight:600;
+                    font-family:inherit;
+                    cursor:pointer;
+                    transition:background 0.15s;
+                ">♥ Save Collection</button>
+                <button id="memory-delete-btn" style="
+                    padding:9px 18px;
+                    background:#ff3b30;
+                    color:white;
+                    border:none;
+                    border-radius:10px;
+                    font-size:13px;
+                    font-weight:600;
+                    font-family:inherit;
+                    cursor:pointer;
+                    transition:background 0.15s;
+                ">✕ Dismiss</button>
+                <button id="memory-refresh-btn" style="
+                    padding:9px 18px;
+                    background:white;
+                    color:#007aff;
+                    border:1px solid rgba(0,122,255,0.3);
+                    border-radius:10px;
+                    font-size:13px;
+                    font-weight:600;
+                    font-family:inherit;
+                    cursor:pointer;
+                    transition:background 0.15s;
+                ">↻ New Memory</button>
+            </div>
+        </div>
+
+        <!-- hero photo -->
+        <div id="memory-hero" style="
+            width:100%;
+            height:280px;
+            border-radius:16px;
+            background-size:cover;
+            background-position:center;
+            margin-bottom:16px;
+            box-shadow:0 8px 32px rgba(0,0,0,0.12);
+            cursor:pointer;
+        "></div>
+
+        <!-- photo grid -->
+        <div id="memory-grid" style="
+            display:grid;
+            grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
+            gap:3px;
+            margin-bottom:20px;
+        "></div>
+
+        <!-- saved collections -->
+        <div id="saved-collections-section" style="display:none;">
+            <div style="font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Saved Collections</div>
+            <div id="saved-collections-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
+    </div>
+</div>
+        <div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7;">
+            <div id="info-tab">
+    <div class="info-header">
+        <span class="info-title">Your Library</span>
+        <span class="total-badge" id="total-badge">...</span>
+        <div class="info-subtitle">A look at your photo collection</div>
+    </div>
+ 
+    <div id="info-loading" class="loading-state">
+        <div class="spinner"></div>
+        Loading stats...
+    </div>
+ 
+    <div id="info-content" style="display:none">
+ 
+        <!-- Monthly bar chart -->
+        <div class="card">
+            <div class="card-title">Photos by Month</div>
+            <div class="chart-wrap">
+                <div class="chart-inner" id="month-chart"></div>
+                <div class="chart-axis"></div>
+            </div>
+        </div>
+ 
+        <!-- Day of week -->
+        <div class="card">
+            <div class="card-title">Most Active Day of Week</div>
+            <div class="dow-chart" id="dow-chart"></div>
+        </div>
+ 
+        <!-- 4 mini tables -->
+        <div class="tables-row">
+            <div class="mini-card">
+                <div class="mini-title">Top Cities</div>
+                <table class="mini-table" id="top-cities-table"></table>
+            </div>
+            <div class="mini-card">
+                <div class="mini-title">Top Countries</div>
+                <table class="mini-table" id="top-countries-table"></table>
+            </div>
+            <div class="mini-card">
+                <div class="mini-title">Least Visited Cities</div>
+                <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
+                <table class="mini-table" id="bottom-cities-table"></table>
+            </div>
+            <div class="mini-card">
+                <div class="mini-title">Least Visited Countries</div>
+                <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
+                <table class="mini-table" id="bottom-countries-table"></table>
+            </div>
+        </div>
+ 
+    </div>
+</div>
+ 
+<script>
+const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+ 
+async function loadStats() {
+    const resp = await fetch('/stats');
+    const data = await resp.json();
+ 
+    document.getElementById('info-loading').style.display = 'none';
+    document.getElementById('info-content').style.display = 'block';
+    document.getElementById('total-badge').textContent = data.total.toLocaleString() + ' photos';
+ 
+    renderMonthChart(data.by_month);
+    renderDowChart(data.by_dow);
+    renderMiniTable('top-cities-table', data.top_cities, 'top');
+    renderMiniTable('top-countries-table', data.top_countries, 'top');
+    renderMiniTable('bottom-cities-table', data.bottom_cities, 'bottom');
+    renderMiniTable('bottom-countries-table', data.bottom_countries, 'bottom');
+}
+ 
+function renderMonthChart(byMonth) {
+    const el = document.getElementById('month-chart');
+    if (!byMonth.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
+ 
+    const max = Math.max(...byMonth.map(d => d.count));
+ 
+    byMonth.forEach(d => {
+        const pct = Math.round((d.count / max) * 100);
+        const [year, month] = d.month.split('-');
+        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const label = monthNames[parseInt(month) - 1] + ' ' + year.slice(2);
+ 
+        const col = document.createElement('div');
+        col.className = 'bar-col';
+        col.innerHTML = `
+            <div class="bar" style="height:${Math.max(pct, 1)}%">
+                <div class="bar-tooltip">${label}: ${d.count.toLocaleString()}</div>
+            </div>
+            <div class="bar-label">${label}</div>
+        `;
+        el.appendChild(col);
+    });
+}
+ 
+function renderDowChart(byDow) {
+    const el = document.getElementById('dow-chart');
+    if (!byDow.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
+ 
+    // fill missing days with 0
+    const counts = Array(7).fill(0);
+    byDow.forEach(d => { counts[d.dow] = d.count; });
+    const max = Math.max(...counts);
+ 
+    counts.forEach((count, dow) => {
+        const pct = max > 0 ? Math.round((count / max) * 100) : 0;
+        const row = document.createElement('div');
+        row.className = 'dow-row';
+        row.innerHTML = `
+            <div class="dow-label">${DOW_NAMES[dow]}</div>
+            <div class="dow-track">
+                <div class="dow-bar" style="width:${pct}%"></div>
+            </div>
+            <div class="dow-count">${count.toLocaleString()}</div>
+        `;
+        el.appendChild(row);
+    });
+ 
+    // animate bars in after paint
+    requestAnimationFrame(() => {
+        el.querySelectorAll('.dow-bar').forEach(bar => {
+            bar.style.transition = 'width 0.7s cubic-bezier(0.34, 1.2, 0.64, 1)';
+        });
+    });
+}
+ 
+function renderMiniTable(id, rows, type) {
+    const table = document.getElementById(id);
+    if (!rows.length) {
+        table.innerHTML = '<tr><td style="color:#8e8e93;font-size:12px">No data</td></tr>';
+        return;
+    }
+    rows.forEach((row, i) => {
+        const tr = document.createElement('tr');
+        const pillClass = type === 'top' ? `rank-${i+1}` : 'bottom-pill';
+        tr.innerHTML = `
+            <td>
+                <span class="rank-pill ${pillClass}">${i+1}</span>
+                ${row.name}
+            </td>
+            <td>${row.count.toLocaleString()}</td>
+        `;
+        table.appendChild(tr);
+    });
+}
+ 
+loadStats();
+</script>
+    </div>
+    
     <div id="empty-state">
-        <div class="empty-icon">📷</div>
+        <div class="empty-icon"></div>
         <div class="empty-text">Find your memories</div>
         <div class="empty-sub">Search by photo similarity or date range</div>
     </div>
@@ -936,18 +1204,18 @@ window.currentView = 'grid';
 
 function setView(view) {
     window.currentView = view;
-    document.getElementById('btn-grid').classList.toggle('active', view === 'grid');
-    document.getElementById('btn-gallery').classList.toggle('active', view === 'gallery');
+    ['grid','gallery','info','memory'].forEach(v => 
+        document.getElementById(`btn-${v}`)?.classList.toggle('active', v === view)
+    );
     document.getElementById('results-area').style.display = view === 'grid' ? 'grid' : 'none';
-    const gp = document.getElementById('gallery-pane');
-    if (view === 'gallery') {
-        gp.classList.add('active');
-        if (window.currentImages.length > 0) buildGallery(window.currentImages, 0);
-    } else {
-        gp.classList.remove('active');
-    }
-}
+    document.getElementById('gallery-pane').classList.toggle('active', view === 'gallery');
+    document.getElementById('info-pane').style.display = view === 'info' ? 'block' : 'none';
+    document.getElementById('memory-pane').style.display = view === 'memory' ? 'flex' : 'none';
 
+    if (view === 'gallery' && window.currentImages.length > 0) buildGallery(window.currentImages, 0);
+    if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
+    if (view === 'memory' && !currentMemory) loadMemory();
+}
 let galleryIndex = 0;
 
 function buildGallery(images, startIndex) {
@@ -987,10 +1255,163 @@ document.getElementById('gallery-next').addEventListener('click', () => {
     const len = window.currentImages.length;
     if (len) setGalleryIndex((galleryIndex + 1) % len);
 });
-
 document.getElementById('image-in').addEventListener('change', e => {
-    document.getElementById('file-label-text').textContent = e.target.files[0]?.name || 'Search by photo';
+    const file = e.target.files[0];
+    document.getElementById('file-label-text').textContent = file?.name || 'Search by photo';
+    if (file) {
+        const url = URL.createObjectURL(file);
+        document.getElementById('ref-img').src = url;
+        document.getElementById('ref-label').textContent = file.name;
+        document.getElementById('ref-preview').style.display = 'block';
+    } else {
+        document.getElementById('ref-preview').style.display = 'none';
+    }
 });
+// ── RESIZABLE MAP ──
+const handle = document.getElementById('resize-handle');
+const mapPane = document.querySelector('.map-pane');
+let isResizing = false;
+
+handle.addEventListener('mousedown', e => {
+    isResizing = true;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', e => {
+    if (!isResizing) return;
+    const split = document.querySelector('.content-split');
+    const splitRect = split.getBoundingClientRect();
+    const newWidth = splitRect.right - e.clientX;
+    const clampedWidth = Math.max(100, Math.min(newWidth, splitRect.width * 0.7));
+    mapPane.style.width = clampedWidth + 'px';
+    // invalidate leaflet size after resize
+    if (window.leafletMap) window.leafletMap.invalidateSize();
+});
+
+document.addEventListener('mouseup', () => {
+    if (!isResizing) return;
+    isResizing = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+});
+// ── MEMORY ──
+let currentMemory = null;
+
+function getSavedCollections() {
+    try { return JSON.parse(localStorage.getItem('mem_collections') || '[]'); }
+    catch { return []; }
+}
+
+function saveCollection(memory) {
+    const collections = getSavedCollections();
+    collections.unshift({
+        id: Date.now(),
+        title: memory.title,
+        subtitle: memory.subtitle,
+        savedAt: new Date().toLocaleDateString(),
+        urls: memory.photos.map(p => p.url).slice(0, 6), // store first 6 for preview
+    });
+    localStorage.setItem('mem_collections', JSON.stringify(collections.slice(0, 20)));
+    renderSavedCollections();
+}
+
+function renderSavedCollections() {
+    const collections = getSavedCollections();
+    const section = document.getElementById('saved-collections-section');
+    const list = document.getElementById('saved-collections-list');
+    if (!collections.length) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+    list.innerHTML = '';
+    collections.forEach(col => {
+        const el = document.createElement('div');
+        el.style.cssText = 'background:white;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);';
+        el.innerHTML = `
+            <div style="display:flex;gap:3px;flex-shrink:0;">
+                ${col.urls.slice(0,3).map(url => `<div style="width:36px;height:36px;border-radius:6px;background:url('/files/${url}') center/cover;"></div>`).join('')}
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${col.title}</div>
+                <div style="font-size:11px;color:#8e8e93;">${col.savedAt} · ${col.subtitle}</div>
+            </div>
+            <button data-id="${col.id}" style="border:none;background:none;color:#ff3b30;font-size:16px;cursor:pointer;padding:4px;">✕</button>
+        `;
+        el.querySelector('button').addEventListener('click', e => {
+            const id = parseInt(e.target.dataset.id);
+            const updated = getSavedCollections().filter(c => c.id !== id);
+            localStorage.setItem('mem_collections', JSON.stringify(updated));
+            renderSavedCollections();
+        });
+        list.appendChild(el);
+    });
+}
+
+async function loadMemory() {
+    document.getElementById('memory-loading').style.display = 'flex';
+    document.getElementById('memory-content').style.display = 'none';
+
+    const resp = await fetch('/memory');
+    const data = await resp.json();
+    currentMemory = data;
+
+    document.getElementById('memory-title').textContent = data.title;
+    document.getElementById('memory-subtitle').textContent = data.subtitle;
+
+    // hero = first photo
+    if (data.photos.length > 0) {
+        const heroUrl = data.photos[0].url.replace(/^\//, '');
+        document.getElementById('memory-hero').style.backgroundImage = `url('/files/${heroUrl}')`;
+        document.getElementById('memory-hero').onclick = () => window.openLightbox(data.photos, 0);
+    }
+
+    // grid = rest
+    const grid = document.getElementById('memory-grid');
+    grid.innerHTML = '';
+    data.photos.slice(1).forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, '');
+        const cell = document.createElement('div');
+        cell.style.cssText = `aspect-ratio:1;background:url('/files/${url}') center/cover;border-radius:4px;cursor:pointer;`;
+        cell.addEventListener('click', () => window.openLightbox(data.photos, i + 1));
+        grid.appendChild(cell);
+    });
+
+    renderSavedCollections();
+
+    document.getElementById('memory-loading').style.display = 'none';
+    document.getElementById('memory-content').style.display = 'block';
+}
+
+document.getElementById('memory-save-btn').addEventListener('click', () => {
+    if (currentMemory) {
+        saveCollection(currentMemory);
+        document.getElementById('memory-save-btn').textContent = '✓ Saved!';
+        setTimeout(() => { document.getElementById('memory-save-btn').textContent = '♥ Save Collection'; }, 2000);
+    }
+});
+
+document.getElementById('memory-delete-btn').addEventListener('click', () => {
+    loadMemory(); // dismiss = load a new one
+});
+
+document.getElementById('memory-refresh-btn').addEventListener('click', () => {
+    loadMemory();
+});
+
+// ── AUTO-LOAD on new session ──
+function checkAndLoadMemory() {
+    const lastVisit = localStorage.getItem('mem_last_visit');
+    const today = new Date().toDateString();
+    localStorage.setItem('mem_last_visit', today);
+    // load if first visit today
+    if (lastVisit !== today) {
+        // auto-switch to memory tab on new day
+        setTimeout(() => setView('memory'), 1200); // after models load
+    }
+}
+
+checkAndLoadMemory();
 </script>
 </body>
 </html>

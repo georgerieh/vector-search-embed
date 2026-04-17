@@ -117,9 +117,9 @@ def ingest():
                 for face in (emb.get("faces") or []):
                     if isinstance(face, dict):
                         vec = face.get("embedding", [])
-                        if len(vec) == 128:
+                        if len(vec) == 512:
                             faces.append(normalize_vector(vec).astype(np.float32).tobytes())
-                    elif isinstance(face, list) and len(face) == 128:
+                    elif isinstance(face, list) and len(face) == 512:
                         faces.append(normalize_vector(face).astype(np.float32).tobytes())
 
                 location = m[6]
