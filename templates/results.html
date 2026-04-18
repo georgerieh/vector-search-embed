@@ -188,11 +188,25 @@
                             opacity: 0.4,
                         });
                         poly.bindTooltip(`${cell.count} photos`, { sticky: true });
-                        poly.on('click', () => {
-                            navigator.clipboard.writeText(cell.h3);
-                            poly.setStyle({ fillOpacity: 0.25 });
-                            setTimeout(() => poly.setStyle({ fillOpacity: 0.08 }), 600);
-                        });
+                                poly.on('click', () => {
+               const h3id = cell.h3;
+                try {
+                    navigator.clipboard.writeText(h3id);
+                } catch {
+                    // fallback for non-https
+                    const ta = document.createElement('textarea');
+                    ta.value = h3id;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                // also put in h3 filter input
+                document.getElementById('h3-filter').value = h3id;
+                poly.setStyle({ fillOpacity: 0.25 });
+                poly.bindTooltip(`Copied: ${h3id}`, {sticky: true}).openTooltip();
+                setTimeout(() => poly.setStyle({ fillOpacity: 0.08 }), 600);
+            });
                         layers.push(poly);
                     });
                     hexLayer = L.layerGroup(layers).addTo(leafletMap);
@@ -218,13 +232,28 @@
         loadingBar.style.width = '50%';
         loadingText.textContent = 'Searching...';
 
-        const resp = await fetch('/search', {
+        const response = await fetch('/search_stream', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ embedding: null, facenet_embedding: null,
-                                   start_date: startDate, end_date: endDate, limit,
-                                   country, city, h3cell }),
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({...})
         });
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const {done, value} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // incomplete last line
+    for (const line of lines) {
+        if (!line) continue;
+        const chunk = JSON.parse(line);
+        // append to existing results instead of replacing
+        window.renderChunk(chunk.images);
+    }
+}
         const data = await resp.json();
         loadingBar.style.width = '100%';
         loadingText.textContent = `${data.images.length} results`;
@@ -319,7 +348,16 @@
         document.getElementById('lightbox-location').textContent = img.location || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
         document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(url));
+        const preload = (i) => {
+        const p = lightboxImages[i];
+        if (!p) return;
+        const l = new Image();
+        l.src = `/files/${p.url.replace(/^\//, '')}`;
+    };
+    preload((lightboxIndex + 1) % lightboxImages.length);
+    preload((lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length);
     }
+
 
     document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
     document.getElementById('lightbox-prev').addEventListener('click', () => { lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length; updateLightbox(); });
@@ -370,6 +408,72 @@
         }
     }, 100);
     });
+            const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const thumb = entry.target;
+                    const url = thumb.dataset.thumb;
+                    if (url && !thumb.style.backgroundImage) {
+                        thumb.style.backgroundImage = `url('${url}')`;
+                    }
+                    observer.unobserve(thumb);
+                }
+    });},{ rootMargin: '200px', threshold: 0 });
+    window.renderChunk = function(images) {
+    const grid = document.getElementById('photo-grid');
+    const favs = getFavorites();
+    const offset = window.currentImages.length;
+    window.currentImages.push(...images);
+    document.getElementById('empty-state').style.display = 'none';
+
+    images.forEach((img, i) => {
+        const url = img.url.replace(/^\//, '');
+        const isFav = favs.includes(url);
+        const cell = document.createElement('div');
+        cell.className = 'grid-cell';
+        cell.innerHTML = `
+            <div class="grid-thumb" data-thumb="/thumbnail/${url}">
+                <div class="grid-overlay">
+                    <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
+                    <button class="thumb-btn thumb-delete" title="Delete">✕</button>
+                </div>
+                <div class="grid-score">${img.score.toFixed(2)}</div>
+            </div>
+        `;
+            cell.querySelector('.grid-thumb').addEventListener('click', e => {
+                if (e.target.closest('.thumb-btn')) return;
+                openLightbox(window.currentImages, offset + i);
+            });
+            cell.querySelector('.thumb-fav').addEventListener('click', e => {
+                e.stopPropagation();
+                const isFav = toggleFavorite(url);
+                e.target.classList.toggle('fav-active', isFav);
+            });
+            cell.querySelector('.thumb-delete').addEventListener('click', async e => {
+                e.stopPropagation();
+                if (!confirm('Delete this photo?')) return;
+                const fd = new FormData();
+                fd.append('image_paths', url);
+                await fetch('/delete_photo', { method: 'POST', body: fd });
+                cell.style.opacity = '0';
+                cell.style.transform = 'scale(0.85)';
+                setTimeout(() => cell.remove(), 300);
+            });
+        grid.appendChild(cell);
+        requestAnimationFrame(() => {
+            cell.style.transitionDelay = `${Math.min(i * 15, 300)}ms`;
+            cell.classList.add('appear');
+        });
+    });
+
+    // lazy load new thumbs
+    grid.querySelectorAll('.grid-thumb:not([data-observed])').forEach(el => {
+        el.dataset.observed = '1';
+        observer.observe(el);
+    });
+
+    document.getElementById('result-count').textContent = `${window.currentImages.length} photos`;
+};
     window.renderResults = function(data) {
         window.currentImages = data.images;
         const grid = document.getElementById('photo-grid');
@@ -422,18 +526,7 @@
                 el.classList.add('appear');
             });
         });
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const thumb = entry.target;
-                    const url = thumb.dataset.thumb;
-                    if (url && !thumb.style.backgroundImage) {
-                        thumb.style.backgroundImage = `url('${url}')`;
-                    }
-                    observer.unobserve(thumb);
-                }
-    });
-},{ rootMargin: '200px', threshold: 0 });
+
         grid.querySelectorAll('.grid-thumb').forEach(el => observer.observe(el));
 
         document.getElementById('result-count').textContent = `${data.images.length} photos`;
@@ -706,26 +799,7 @@
         padding: 12px;
         background: #f0f0f0;
     }
-    .map-pane {
-        width: 320px;
-        min-width: 100px;
-        max-width: 70%;
-        border-left: 1px solid rgba(0,0,0,0.08);
-        overflow: hidden;
-        position: relative;
-        height: 100%;  /* ADD THIS */
-    }
-
-    /* drag handle */
-    .resize-handle {
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 5px;
-    cursor: col-resize;
-    background: transparent;
-    transition: background 0.15s;
-    z-index: 10;
-}
+#map { width: 100%; height: 220px; }
 .resize-handle:hover, .resize-handle.dragging {
     background: rgba(0,122,255,0.4);
 }
@@ -1074,6 +1148,9 @@
             display:flex;align-items:center;justify-content:center;
         ">+</button>
     </div>
+    <div class="sidebar-section" style="border-top:1px solid rgba(0,0,0,0.07);padding:0;">
+    <div id="map" style="width:100%;height:220px;"></div>
+</div>
     <div id="album-list" style="display:flex;flex-direction:column;gap:4px;"></div>
 </div>
     
@@ -1100,10 +1177,6 @@
                 <div class="empty-sub">Search by photo similarity or date range</div>
             </div>
             <div id="photo-grid"></div>
-        </div>
-        <div class="map-pane">
-            <div class="resize-handle" id="resize-handle"></div>
-            <div id="map"></div>
         </div>
     </div>
 
