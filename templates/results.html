@@ -237,6 +237,8 @@ let markerClusters = null;
         document.getElementById('loading-container').style.display = 'block';
         loadingBar.style.width = '50%';
         loadingText.textContent = 'Searching...';
+        window.currentImages = [];
+        document.getElementById('photo-grid').innerHTML = '';
 
         const response = await fetch('/search_stream', {
             method: 'POST',
@@ -262,13 +264,12 @@ let markerClusters = null;
         window.renderChunk(chunk.images);
     }
 }
-        const data = await resp.json();
-        loadingBar.style.width = '100%';
-        loadingText.textContent = `${data.images.length} results`;
+     loadingBar.style.width = '100%';
+        loadingText.textContent = `${window.currentImages.length} results`;
         setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
-        window.renderResults(data);
-        if (window.currentView === 'memory') loadMemory();
-        return; // don't proceed to model inference
+        setView('grid');
+        return;
+     }
     }
 
     // image search — needs models
