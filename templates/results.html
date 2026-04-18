@@ -31,15 +31,15 @@
             strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
             return;
         }
-        favs.slice(0, 16).forEach(url => {
+        favs.forEach(url => {
             const el = document.createElement('div');
             el.className = 'fav-thumb';
             el.style.backgroundImage = `url('/thumbnail/${url}')`;
             el.title = url.split('/').pop();
             el.addEventListener('click', () => {
-                const images = window.currentImages || [];
-                const i = images.findIndex(img => img.url.replace(/^\//, '') === url);
-                if (i >= 0) openLightbox(images, i);
+                const allFavs = getFavorites().map(u => ({ url: u, score: 0, lat: null, lon: null, location: null }));
+                const i = allFavs.findIndex(img => img.url === url);
+                openLightbox(allFavs, i >= 0 ? i : 0);
             });
             strip.appendChild(el);
         });
@@ -52,7 +52,10 @@
         const reader = response.body.getReader();
         const chunks = [];
         let received = 0;
-
+        window.currentImages = [];
+        document.getElementById('photo-grid').innerHTML = '';
+        clearGridSelection();
+        document.getElementById('empty-state').style.display = 'none';
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -348,10 +351,12 @@
     function updateLightbox() {
         const img = lightboxImages[lightboxIndex];
         const url = img.url.replace(/^\//, '');
+        const BASE = 'media/georgerieh/T7/photos_from_icloud/';
+        const cleanUrl = url.startsWith(BASE) ? url.slice(BASE.length) : url;
         document.getElementById('lightbox-img').src = `/files/${url}`;
         document.getElementById('lightbox-location').textContent = img.location || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
-        document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(url));
+        document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(cleanUrl));
         const preload = (i) => {
         const p = lightboxImages[i];
         if (!p) return;
@@ -434,7 +439,20 @@
         const url = img.url.replace(/^\//, '');
         const isFav = favs.includes(url);
         const cell = document.createElement('div');
+        cell.dataset.url = url;
         cell.className = 'grid-cell';
+        cell.draggable = true;
+            cell.addEventListener('dragstart', e => {
+                // if multiple selected, drag all of them
+                const urls = gridSelected.size > 0 ? [...gridSelected] : [url];
+                e.dataTransfer.setData('photo-paths', JSON.stringify(urls));
+                e.dataTransfer.effectAllowed = 'link';
+                // visual feedback
+                cell.style.opacity = '0.5';
+            });
+            cell.addEventListener('dragend', () => {
+                cell.style.opacity = '';
+            });
         cell.innerHTML = `
             <div class="grid-thumb" data-thumb="/thumbnail/${url}">
                 <div class="grid-overlay">
@@ -446,7 +464,24 @@
         `;
             cell.querySelector('.grid-thumb').addEventListener('click', e => {
                 if (e.target.closest('.thumb-btn')) return;
+                if (gridSelected.size > 0 || e.shiftKey) {
+                    if (gridSelected.has(url)) {
+                        gridSelected.delete(url);
+                        cell.classList.remove('grid-selected');
+                    } else {
+                        gridSelected.add(url);
+                        cell.classList.add('grid-selected');
+                    }
+                    updateGridToolbar();
+                    return;
+                }
                 openLightbox(window.currentImages, offset + i);
+                cell.addEventListener('contextmenu', e => {
+                   e.preventDefault();
+                gridSelected.add(url);
+                cell.classList.add('grid-selected');
+                updateGridToolbar();
+            });
             });
             cell.querySelector('.thumb-fav').addEventListener('click', e => {
                 e.stopPropagation();
@@ -491,6 +526,7 @@
             const isFav = favs.includes(url);
 
             const cell = document.createElement('div');
+            cell.dataset.url = url;
             cell.className = 'grid-cell';
             cell.innerHTML = `
                 <div class="grid-thumb" data-thumb="/thumbnail/${url}">
@@ -503,7 +539,24 @@
             `;
             cell.querySelector('.grid-thumb').addEventListener('click', e => {
                 if (e.target.closest('.thumb-btn')) return;
+                if (gridSelected.size > 0 || e.shiftKey) {
+                    if (gridSelected.has(url)) {
+                        gridSelected.delete(url);
+                        cell.classList.remove('grid-selected');
+                    } else {
+                        gridSelected.add(url);
+                        cell.classList.add('grid-selected');
+                    }
+                    updateGridToolbar();
+                    return;
+                }
                 openLightbox(data.images, i);
+                cell.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                gridSelected.add(url);
+                cell.classList.add('grid-selected');
+                updateGridToolbar();
+            });
             });
             cell.querySelector('.thumb-fav').addEventListener('click', e => {
                 e.stopPropagation();
@@ -594,6 +647,19 @@
             margin-bottom: 16px;
         }
         .info-header { margin-bottom: 24px; }
+        .grid-cell.grid-selected .grid-thumb::after {
+    content: '✓';
+    position: absolute;
+    inset: 0;
+    background: rgba(0,122,255,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: white;
+    border-radius: 4px;
+    border: 3px solid #007aff;
+}
 .info-title { font-size: 28px; font-weight: 700; letter-spacing: -0.7px; }
 .info-subtitle { font-size: 14px; color: #8e8e93; margin-top: 4px; }
 .total-badge { display: inline-block; background: #007aff; color: white; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-left: 10px; }
@@ -1192,6 +1258,12 @@
             <div class="empty-icon"></div>
             <div class="empty-text">Find your memories</div>
             <div class="empty-sub">Search by photo similarity or date range</div>
+        </div>
+        <div id="grid-select-toolbar" style="display:none;align-items:center;gap:10px;padding:8px 0;margin-bottom:6px;">
+    <span id="grid-select-count" style="font-size:13px;color:#3c3c43;font-weight:500;"></span>
+    <button id="grid-deselect-all" style="border:none;background:#f2f2f7;color:#3c3c43;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Deselect all</button>
+    <button id="grid-fav-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">♥ Favorite</button>
+    <button id="grid-delete-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✕ Delete</button>
         </div>
         <div id="photo-grid"></div>
     </div>
@@ -2032,38 +2104,29 @@ function renderAlbumList(albums) {
         el.addEventListener('drop', async (e) => {
             e.preventDefault();
             el.style.background = 'white';
-            const path = e.dataTransfer.getData('photo-path');
-            if (!path) return;
-            await fetch(`/albums/${encodeURIComponent(album.name)}/add`, {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({path})
-            });
+            const raw = e.dataTransfer.getData('photo-paths');
+            if (!raw) return;
+            const paths = JSON.parse(raw);
+            await Promise.all(paths.map(path =>
+                fetch(`/albums/${encodeURIComponent(album.name)}/add`, {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({path})
+                })
+            ));
             // flash feedback
+            
             el.style.background = '#d4edda';
-            setTimeout(() => el.style.background = 'white', 600);
+            el.querySelector('.album-name').textContent += ` (+${paths.length})`;
+            setTimeout(() => {el.style.background = 'white'; loadAlbums();},
+            600);
+            
         });
 
         list.appendChild(el);
     });
 }
 
-// make grid cells draggable — patch into renderResults
-const _origRenderResults = window.renderResults;
-window.renderResults = function(data) {
-    _origRenderResults(data);
-    const cells = document.querySelectorAll('.grid-cell');
-    cells.forEach(function(cell, i) {
-        if (!data.images[i]) return;
-        const url = data.images[i].url;
-        if (!url) return;
-        cell.draggable = true;
-        cell.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('photo-path', url.replace(/^\//, ''));
-            e.dataTransfer.effectAllowed = 'link';
-        });
-    });
-};
 
 // new album button
 document.getElementById('new-album-btn').addEventListener('click', async () => {
@@ -2230,6 +2293,49 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(interval);
         }
     }, 100);
+});
+// ── GRID MULTISELECT ──
+const gridSelected = new Set();
+
+function updateGridToolbar() {
+    const toolbar = document.getElementById('grid-select-toolbar');
+    toolbar.style.display = gridSelected.size > 0 ? 'flex' : 'none';
+    document.getElementById('grid-select-count').textContent = `${gridSelected.size} selected`;
+}
+
+function clearGridSelection() {
+    gridSelected.forEach(url => {
+        const cell = document.querySelector(`.grid-cell[data-url="${url}"]`);
+        if (cell) cell.classList.remove('grid-selected');
+    });
+    gridSelected.clear();
+    updateGridToolbar();
+}
+
+document.getElementById('grid-deselect-all').addEventListener('click', clearGridSelection);
+
+document.getElementById('grid-fav-selected').addEventListener('click', () => {
+    gridSelected.forEach(url => window.toggleFavorite(url));
+    document.getElementById('grid-fav-selected').textContent = '✓ Done';
+    setTimeout(() => {
+        document.getElementById('grid-fav-selected').textContent = '♥ Favorite';
+        clearGridSelection();
+    }, 800);
+});
+
+document.getElementById('grid-delete-selected').addEventListener('click', async () => {
+    if (!confirm(`Permanently delete ${gridSelected.size} photo(s)?`)) return;
+    for (const url of gridSelected) {
+        const fd = new FormData();
+        fd.append('image_paths', url);
+        await fetch('/delete_photo', { method: 'POST', body: fd });
+        const cell = document.querySelector(`.grid-cell[data-url="${url}"]`);
+        if (cell) { cell.style.opacity = '0'; cell.style.transform = 'scale(0.85)'; cell.style.transition = 'all 0.2s'; }
+    }
+    setTimeout(() => {
+        gridSelected.forEach(url => document.querySelector(`.grid-cell[data-url="${url}"]`)?.remove());
+        clearGridSelection();
+    }, 220);
 });
 </script>
 </body>
