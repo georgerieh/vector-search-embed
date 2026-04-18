@@ -354,7 +354,17 @@ let markerClusters = null;
         const url = img.url.replace(/^\//, '');
         const BASE = 'media/georgerieh/T7/photos_from_icloud/';
         const cleanUrl = url.startsWith(BASE) ? url.slice(BASE.length) : url;
-        document.getElementById('lightbox-img').src = `/files/${url}`;
+        const lightboxImg = document.getElementById('lightbox-img');
+    // show thumbnail immediately
+    lightboxImg.src = `/thumbnail/${url}?size=800`;
+    lightboxImg.style.filter = 'blur(2px)';
+    // load full res in background, swap when ready
+    const full = new Image();
+    full.onload = () => {
+        lightboxImg.src = full.src;
+        lightboxImg.style.filter = '';
+    };
+    full.src = `/files/${url}`;
         document.getElementById('lightbox-location').textContent = img.location || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
         document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(cleanUrl));
@@ -1878,7 +1888,7 @@ async function loadMemory() {
 
         if (data.photos.length > 0) {
             const heroUrl = data.photos[0].url.replace(/^\//, '');
-            ocument.getElementById('memory-hero').style.backgroundImage = `url('/thumbnail/${heroUrl}?size=800')`;
+            document.getElementById('memory-hero').style.backgroundImage = `url('/thumbnail/${heroUrl}?size=800')`;
             const hero = document.getElementById('memory-hero');
         hero.onclick = () => { if (window.openLightbox) window.openLightbox(data.photos, 0); };
         hero.style.position = 'relative';
@@ -2362,3 +2372,6 @@ document.getElementById('grid-delete-selected').addEventListener('click', async 
 </script>
 </body>
 </html>
+
+
+
