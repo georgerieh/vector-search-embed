@@ -164,6 +164,8 @@
         if (leafletMap) return;
         leafletMap = L.map('map').setView([48.505, 2.33], 3);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(leafletMap);
+        leafletMap.on('zoomend moveend', updateHexLayer);
+        updateHexLayer();
     }
     let hexLayer = null;
 
@@ -869,7 +871,15 @@
             color: rgba(255,255,255,0.6);
             font-variant-numeric: tabular-nums;
         }
-
+        .map-pane {
+    width: 320px;
+    min-width: 200px;
+    max-width: 60%;
+    border-left: 1px solid rgba(0,0,0,0.08);
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+}
         #map { width: 100%; height: 100%; min-height: 0; }
 
 
@@ -1172,15 +1182,19 @@
         <div class="toolbar-info" id="toolbar-info"></div>
     </div>
     <div class="content-split" id="results-area">
-        <div class="grid-pane">
-            <div id="empty-state" style="display:flex;">
-                <div class="empty-icon"></div>
-                <div class="empty-text">Find your memories</div>
-                <div class="empty-sub">Search by photo similarity or date range</div>
-            </div>
-            <div id="photo-grid"></div>
+    <div class="grid-pane">
+        <div id="empty-state" style="display:flex;">
+            <div class="empty-icon"></div>
+            <div class="empty-text">Find your memories</div>
+            <div class="empty-sub">Search by photo similarity or date range</div>
         </div>
+        <div id="photo-grid"></div>
     </div>
+    <div class="map-pane" id="map-pane">
+        <div class="resize-handle" id="resize-handle"></div>
+        <div id="map"></div>
+    </div>
+</div>
 
     <div class="gallery-pane" id="gallery-pane">
         <div class="gallery-main" id="gallery-main">
@@ -1514,6 +1528,7 @@ window.setView = function(view) {
     const hasResults = window.currentImages.length > 0;
 
     document.getElementById('results-area').style.display = view === 'grid' ? 'flex' : 'none';
+    document.getElementById('map-pane').style.display = view === 'grid' ? 'flex' : 'none';
     document.getElementById('empty-state').style.display = view === 'grid' && !hasResults ? 'flex' : 'none';
     document.getElementById('gallery-pane').classList.toggle('active', view === 'gallery');
     document.getElementById('info-pane').style.display     = view === 'info' ? 'flex' : 'none';
@@ -1578,7 +1593,7 @@ document.getElementById('image-in').addEventListener('change', e => {
 });
 // ── RESIZABLE MAP ──
 const handle = document.getElementById('resize-handle');
-const mapPane = document.querySelector('.map-pane');
+const mapPane = document.getElementById('map-pane');
 let isResizing = false;
 
 handle.addEventListener('mousedown', e => {
@@ -1587,18 +1602,15 @@ handle.addEventListener('mousedown', e => {
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 });
-
 document.addEventListener('mousemove', e => {
     if (!isResizing) return;
     const split = document.querySelector('.content-split');
     const splitRect = split.getBoundingClientRect();
     const newWidth = splitRect.right - e.clientX;
-    const clampedWidth = Math.max(100, Math.min(newWidth, splitRect.width * 0.7));
+    const clampedWidth = Math.max(200, Math.min(newWidth, splitRect.width * 0.7));
     mapPane.style.width = clampedWidth + 'px';
-    // invalidate leaflet size after resize
-    if (window.leafletMap) window.leafletMap.invalidateSize();
+    if (leafletMap) leafletMap.invalidateSize();
 });
-
 document.addEventListener('mouseup', () => {
     if (!isResizing) return;
     isResizing = false;
