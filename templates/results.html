@@ -17,74 +17,66 @@
     <script type="module">
     import { InferenceSession, Tensor } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
     import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
-
+    
     const loadingBar = document.getElementById('loading-bar');
     const loadingText = document.getElementById('loading-text');
     const btn = document.querySelector('button[name="forwardBtn"]');
-
     btn.disabled = true;
-    let animDone = false;
-    const start = performance.now();
-
-    function updatePercent(target, label) {
-        if (animDone) return;
-        const elapsed = performance.now() - start;
-        const progress = Math.min(elapsed / 10000, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        const pct = Math.round(eased * target);
-        loadingBar.style.width = pct + '%';
-        loadingText.textContent = `${label} ${pct}%`;
-        if (pct < target) requestAnimationFrame(() => updatePercent(target, label));
-    }
-
-    loadingText.textContent = 'Loading DINO... 0%';
-    requestAnimationFrame(() => updatePercent(45, 'Loading DINO...'));
     let dinoSession = null;
 
-    async function loadModel() {
-        // 1. KILL the old leak before starting a new one
-        if (dinoSession) {
-            console.log("Releasing previous session...");
-            await dinoSession.release(); 
-            dinoSession = null;
+    async function fetchWithProgress(url, onProgress) {
+        const response = await fetch(url);
+        const contentLength = response.headers.get('Content-Length');
+        const total = contentLength ? parseInt(contentLength) : null;
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.byteLength;
+            if (total) onProgress(received / total);
         }
 
-        try {
-            // 2. Load the new session
-            dinoSession = await ort.InferenceSession.create('/models/dino_vitb16_quantized.onnx', {
-                executionProviders: ['webgpu', 'wasm'],
-                preferredOutputLocation: 'gpu-buffer',
-                // OPTIONAL: Speed up WASM if WebGPU fails
-                executionParameters: {
-                    cpuset: '0-3' // Helps on Android to prevent overheating
-                }
-            });
-            console.log("DINO Model loaded successfully!");
-        } catch (e) {
-            console.error("Failed to load model:", e);
+        // reassemble
+        const buffer = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+            buffer.set(chunk, offset);
+            offset += chunk.byteLength;
         }
+        return buffer.buffer;
     }
-    animDone = true;
+    loadingText.textContent = 'Loading DINO...';
+    loadingBar.style.width = '0%';
+
+    const dinoBuffer = await fetchWithProgress('/models/dino_vitb16_quantized.onnx', (pct) => {
+        const display = Math.round(pct * 45); // DINO occupies 0–45%
+        loadingBar.style.width = display + '%';
+        loadingText.textContent = `Loading DINO... ${display}%`;
+    });
+
+    dinoSession = await ort.InferenceSession.create(dinoBuffer, {
+        executionProviders: ['webgpu', 'wasm'],
+    });
+
     loadingBar.style.width = '50%';
-    animDone = false;
-    const faceStart = performance.now();
+    loadingText.textContent = 'Loading FaceNet...';
 
-    function updateFacePercent() {
-        if (animDone) return;
-        const elapsed = performance.now() - faceStart;
-        const progress = Math.min(elapsed / 8000, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        const pct = 50 + Math.round(eased * 45);
-        loadingBar.style.width = pct + '%';
-        loadingText.textContent = `Loading FaceNet... ${pct}%`;
-        if (pct < 95) requestAnimationFrame(updateFacePercent);
-    }
-    requestAnimationFrame(updateFacePercent);
-    const faceNetSession = await InferenceSession.create('/models/facenet_inline.onnx');
-    animDone = true;
+    const facenetBuffer = await fetchWithProgress('/models/facenet_inline.onnx', (pct) => {
+        const display = 50 + Math.round(pct * 40); // FaceNet occupies 50–90%
+        loadingBar.style.width = display + '%';
+        loadingText.textContent = `Loading FaceNet... ${display}%`;
+    });
 
-    loadingText.textContent = 'Loading face detector... 95%';
+    const faceNetSession = await InferenceSession.create(facenetBuffer, {
+        executionProviders: ['webgpu', 'wasm'],
+    });
+
     loadingBar.style.width = '95%';
+    loadingText.textContent = 'Loading face detector...';
     const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm');
     const faceDetector = await FaceDetector.createFromOptions(vision, {
         baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' },
@@ -258,7 +250,7 @@
     function updateLightbox() {
         const img = lightboxImages[lightboxIndex];
         const url = img.url.replace(/^\//, '');
-        document.getElementById('lightbox-img').src = `/files/${url}`;
+        document.getElementById('lightbox-img').src = `/thumbnail/${url}`;
         document.getElementById('lightbox-location').textContent = img.location || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
         document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(url));
@@ -334,7 +326,7 @@
             if (!img.lat) return;
             const url = img.url.replace(/^\//, '');
             const marker = L.marker([img.lat, img.lon]);
-            marker.bindPopup(`<img src="/files/${url}" style="width:120px;height:80px;object-fit:cover;border-radius:6px;"><br><small>${img.location||''}</small>`);
+            marker.bindPopup(`<img src="/thumbnail/${url}" style="width:120px;height:80px;object-fit:cover;border-radius:6px;"><br><small>${img.location||''}</small>`);
             marker.on('click', () => openLightbox(images, i));
             markerClusters.addLayer(marker);
             bounds.push([img.lat, img.lon]);
@@ -407,9 +399,9 @@
                         thumb.style.backgroundImage = `url('${url}')`;
                     }
                     observer.unobserve(thumb);
-                }
+                }, 
     });
-}, { rootMargin: '100px' });
+},{ rootMargin: '200px', threshold: 0 });
         grid.querySelectorAll('.grid-thumb').forEach(el => observer.observe(el));
 
         document.getElementById('result-count').textContent = `${data.images.length} photos`;
@@ -436,7 +428,7 @@
         favs.slice(0, 16).forEach(url => {
             const el = document.createElement('div');
             el.className = 'fav-thumb';
-            el.style.backgroundImage = `url('/files/${url}')`;
+            el.style.backgroundImage = `url('/thumbnail/${url}')`;
             el.title = url.split('/').pop();
             el.addEventListener('click', () => {
                 const images = window.currentImages || [];
@@ -690,10 +682,11 @@
 
         /* ── SPLIT ── */
         .content-split {
-        flex: 1;
-        display: flex;      /* change from grid to flex */
-        overflow: hidden;
-    }
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;  /* ADD THIS — critical for flex children in a flex column */
+}
 
     .grid-pane {
         flex: 1;
@@ -702,7 +695,6 @@
         padding: 12px;
         background: #f0f0f0;
     }
-
     .map-pane {
         width: 320px;
         min-width: 100px;
@@ -710,6 +702,7 @@
         border-left: 1px solid rgba(0,0,0,0.08);
         overflow: hidden;
         position: relative;
+        height: 100%;  /* ADD THIS */
     }
 
     /* drag handle */
@@ -790,7 +783,8 @@
             font-variant-numeric: tabular-nums;
         }
 
-        #map { width: 100%; height: 100%; }
+        #map { width: 100%; height: 100%; min-height: 0; }
+
 
         /* ── GALLERY ── */
         .gallery-pane {
@@ -1059,6 +1053,19 @@
         <div class="section-title">Favorites</div>
         <div class="fav-strip" id="fav-strip"></div>
     </div>
+    <div class="sidebar-section" style="border-top:1px solid rgba(0,0,0,0.07);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="section-title" style="margin:0">Albums</div>
+        <button id="new-album-btn" style="
+            border:none;background:#007aff;color:white;
+            border-radius:50%;width:22px;height:22px;
+            font-size:16px;line-height:1;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;
+        ">+</button>
+    </div>
+    <div id="album-list" style="display:flex;flex-direction:column;gap:4px;"></div>
+</div>
+    
 </div>
 
 <!-- MAIN -->
@@ -1069,6 +1076,7 @@
             <button class="view-btn" id="btn-gallery" onclick="setView('gallery')">Gallery</button>
             <button class="view-btn" id="btn-info" onclick="setView('info')">Stats!</button>
             <button class="view-btn" id="btn-memory" onclick="setView('memory')">Memory</button>
+            <button class="view-btn" id="btn-review" onclick="setView('review')">Review</button>
         </div>
         <div class="toolbar-spacer"></div>
         <div class="toolbar-info" id="toolbar-info"></div>
@@ -1173,6 +1181,43 @@
             <div style="font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Saved Collections</div>
             <div id="saved-collections-list" style="display:flex; flex-direction:column; gap:8px;"></div>
         </div>
+    </div>
+</div>
+<div id="review-pane" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:#f2f2f7;">
+    <div style="
+        display:flex;align-items:center;justify-content:space-between;
+        padding:12px 16px;
+        background:rgba(255,255,255,0.88);
+        border-bottom:1px solid rgba(0,0,0,0.08);
+    ">
+        <div>
+            <span style="font-size:17px;font-weight:600;">Review</span>
+            <span id="review-progress" style="font-size:12px;color:#8e8e93;margin-left:10px;"></span>
+        </div>
+        <button id="review-next-btn" style="
+            padding:8px 18px;background:#007aff;color:white;
+            border:none;border-radius:10px;font-size:13px;
+            font-weight:600;font-family:inherit;cursor:pointer;
+        ">Next batch →</button>
+    </div>
+    <div id="review-grid" style="
+        flex:1;overflow-y:auto;padding:12px;
+        display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+        gap:3px;
+        align-content:start;
+    "></div>
+    <div id="review-exhausted" style="
+        display:none;flex:1;align-items:center;justify-content:center;
+        flex-direction:column;gap:10px;color:#8e8e93;
+    ">
+        <div style="font-size:48px;">🎉</div>
+        <div style="font-size:17px;font-weight:500;color:#3c3c43;">All photos reviewed!</div>
+        <button id="review-reset-btn" style="
+            margin-top:8px;padding:9px 20px;background:#007aff;color:white;
+            border:none;border-radius:10px;font-size:13px;font-weight:600;
+            font-family:inherit;cursor:pointer;
+        ">Start over</button>
     </div>
 </div>
 <div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7;">
@@ -1320,6 +1365,33 @@ async function loadStats() {
 
 
 <!-- LIGHTBOX -->
+ <div id="album-overlay" style="
+    display:none;position:fixed;inset:0;
+    background:rgba(242,242,247,0.97);
+    backdrop-filter:blur(20px);
+    z-index:500;flex-direction:column;overflow:hidden;
+">
+    <div style="
+        display:flex;align-items:center;gap:12px;
+        padding:12px 16px;
+        background:rgba(255,255,255,0.88);
+        border-bottom:1px solid rgba(0,0,0,0.08);
+    ">
+        <button id="album-back" style="
+            border:none;background:none;font-size:20px;
+            cursor:pointer;color:#007aff;padding:4px 8px;
+        ">‹</button>
+        <div id="album-overlay-title" style="font-size:17px;font-weight:600;flex:1;"></div>
+        <div id="album-overlay-count" style="font-size:12px;color:#8e8e93;"></div>
+    </div>
+    <div id="album-overlay-grid" style="
+        flex:1;overflow-y:auto;padding:12px;
+        display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+        gap:3px;
+        align-content:start;
+    "></div>
+</div>
 <div id="lightbox">
     <button class="lb-nav" id="lightbox-prev">‹</button>
     <div class="lightbox-content">
@@ -1343,6 +1415,7 @@ async function loadStats() {
 </div>
 
 <script>
+
 window.currentImages = [];
 window.currentView = 'grid';
 
@@ -1359,10 +1432,12 @@ function setView(view) {
     document.getElementById('gallery-pane').classList.toggle('active', view === 'gallery');
     document.getElementById('info-pane').style.display     = view === 'info' ? 'flex' : 'none';
     document.getElementById('memory-pane').style.display   = view === 'memory' ? 'flex' : 'none';
+    document.getElementById('review-pane').style.display   = view === 'review' ? 'flex' : 'none';
 
     if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 0);
     if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
     if (view === 'memory') loadMemory();
+    if (view === 'review' && !document.getElementById('review-grid').children.length) loadReviewBatch();
 }
 let galleryIndex = 0;
 
@@ -1377,12 +1452,12 @@ function buildGallery(images, startIndex) {
         const url = img.url.replace(/^\//, '');
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
-        photo.style.backgroundImage = `url('/files/${url}')`;
+        photo.style.backgroundImage = `url('/thumbnail/${url}')`;
         main.insertBefore(photo, main.querySelector('.gallery-controls'));
 
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
-        thumb.style.backgroundImage = `url('/files/${url}')`;
+        thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
@@ -1478,7 +1553,7 @@ function renderSavedCollections() {
         el.style.cssText = 'background:white;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);';
         el.innerHTML = `
             <div style="display:flex;gap:3px;flex-shrink:0;">
-                ${col.urls.slice(0,3).map(url => `<div style="width:36px;height:36px;border-radius:6px;background:url('/files/${url}') center/cover;"></div>`).join('')}
+                ${col.urls.slice(0,3).map(url => `<div style="width:36px;height:36px;border-radius:6px;background:url('/thumbnail/${url}') center/cover;"></div>`).join('')}
             </div>
             <div style="flex:1;min-width:0;">
                 <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${col.title}</div>
@@ -1510,10 +1585,25 @@ async function loadMemory() {
 
         if (data.photos.length > 0) {
             const heroUrl = data.photos[0].url.replace(/^\//, '');
-            document.getElementById('memory-hero').style.backgroundImage = `url('/files/${heroUrl}')`;
-            document.getElementById('memory-hero').onclick = () => {
-                if (window.openLightbox) window.openLightbox(data.photos, 0);
-            };
+            document.getElementById('memory-hero').style.backgroundImage = `url('/thumbnail/${heroUrl}')`;
+            const hero = document.getElementById('memory-hero');
+        hero.onclick = () => { if (window.openLightbox) window.openLightbox(data.photos, 0); };
+        hero.style.position = 'relative';
+
+        const heroDelete = document.createElement('button');
+        heroDelete.textContent = '✕';
+        heroDelete.style.cssText = 'position:absolute;top:10px;right:10px;border:none;background:rgba(255,59,48,0.8);color:white;border-radius:50%;width:30px;height:30px;font-size:14px;cursor:pointer;z-index:10;';
+        heroDelete.onclick = async (e) => {
+            e.stopPropagation();
+            if (!confirm('Delete this photo?')) return;
+            const url = data.photos[0].url.replace(/^\//, '');
+            const fd = new FormData();
+            fd.append('image_paths', url);
+            await fetch('/delete_photo', { method: 'POST', body: fd });
+            data.photos.splice(0, 1);
+            loadMemory();
+        };
+        hero.appendChild(heroDelete);
         }
 
         const grid = document.getElementById('memory-grid');
@@ -1521,10 +1611,26 @@ async function loadMemory() {
         data.photos.slice(1).forEach((photo, i) => {
             const url = photo.url.replace(/^\//, '');
             const cell = document.createElement('div');
-            cell.style.cssText = `aspect-ratio:1;background:url('/thumbnail/${url}') center/cover;border-radius:4px;cursor:pointer;`;
-            cell.addEventListener('click', () => {
+            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
+            cell.innerHTML = `<div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>`;
+            cell.querySelector('div').addEventListener('click', () => {
                 if (window.openLightbox) window.openLightbox(data.photos, i + 1);
             });
+            const delBtn = document.createElement('button');
+            delBtn.textContent = '✕';
+            delBtn.style.cssText = 'display:none;position:absolute;top:4px;right:4px;border:none;background:rgba(255,59,48,0.8);color:white;border-radius:50%;width:24px;height:24px;font-size:11px;cursor:pointer;z-index:10;';
+            delBtn.onclick = async (e) => {
+                e.stopPropagation();
+                if (!confirm('Delete this photo?')) return;
+                const fd = new FormData();
+                fd.append('image_paths', url);
+                await fetch('/delete_photo', { method: 'POST', body: fd });
+                cell.style.opacity = '0';
+                setTimeout(() => cell.remove(), 300);
+            };
+            cell.addEventListener('mouseenter', () => delBtn.style.display = 'block');
+            cell.addEventListener('mouseleave', () => delBtn.style.display = 'none');
+            cell.appendChild(delBtn);
             grid.appendChild(cell);
         });
 
@@ -1568,6 +1674,287 @@ function checkAndLoadMemory() {
 }
 
 checkAndLoadMemory();
+// ── ALBUMS ──
+async function loadAlbums() {
+    const resp = await fetch('/albums');
+    const data = await resp.json();
+    renderAlbumList(data.albums);
+}
+
+function renderAlbumList(albums) {
+    const list = document.getElementById('album-list');
+    list.innerHTML = '';
+    if (!albums.length) {
+        list.innerHTML = '<span style="font-size:12px;color:#8e8e93">No albums yet</span>';
+        return;
+    }
+    albums.forEach(album => {
+        const el = document.createElement('div');
+        el.className = 'album-row';
+        el.draggable = false; // row itself not draggable, it's a drop target
+        el.dataset.name = album.name;
+        el.style.cssText = `
+            display:flex;align-items:center;gap:8px;
+            padding:7px 10px;border-radius:10px;
+            background:white;cursor:pointer;
+            box-shadow:0 1px 3px rgba(0,0,0,0.06);
+            transition:background 0.15s;
+            position:relative;
+        `;
+        el.innerHTML = `
+            <span style="font-size:16px;">🗂</span>
+            <div style="flex:1;min-width:0;">
+                <div class="album-name" style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${album.name}</div>
+                <div style="font-size:10px;color:#8e8e93;">${album.count} photos</div>
+            </div>
+            <button class="album-del" style="
+                border:none;background:none;color:#c7c7cc;
+                font-size:14px;cursor:pointer;padding:2px 4px;
+                opacity:0;transition:opacity 0.15s;
+            ">✕</button>
+        `;
+
+        // single click → open overlay
+        el.addEventListener('click', (e) => {
+            if (e.target.classList.contains('album-del')) return;
+            openAlbumOverlay(album.name);
+        });
+
+        // double click → rename
+        el.addEventListener('dblclick', (e) => {
+            if (e.target.classList.contains('album-del')) return;
+            const nameEl = el.querySelector('.album-name');
+            const old = nameEl.textContent;
+            nameEl.contentEditable = true;
+            nameEl.focus();
+            const range = document.createRange();
+            range.selectNodeContents(nameEl);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+
+            nameEl.onblur = async () => {
+                nameEl.contentEditable = false;
+                const newName = nameEl.textContent.trim();
+                if (newName && newName !== old) {
+                    await fetch(`/albums/${encodeURIComponent(old)}/rename`, {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({new_name: newName})
+                    });
+                }
+                loadAlbums();
+            };
+            nameEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } };
+        });
+
+        // delete button
+        el.querySelector('.album-del').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm(`Delete album "${album.name}"?`)) return;
+            await fetch(`/albums/${encodeURIComponent(album.name)}`, { method: 'DELETE' });
+            loadAlbums();
+        });
+
+        // show/hide delete on hover
+        el.addEventListener('mouseenter', () => el.querySelector('.album-del').style.opacity = '1');
+        el.addEventListener('mouseleave', () => el.querySelector('.album-del').style.opacity = '0');
+
+        // drop target for drag from grid
+        el.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            el.style.background = '#e8f0fe';
+        });
+        el.addEventListener('dragleave', () => el.style.background = 'white');
+        el.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            el.style.background = 'white';
+            const path = e.dataTransfer.getData('photo-path');
+            if (!path) return;
+            await fetch(`/albums/${encodeURIComponent(album.name)}/add`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({path})
+            });
+            // flash feedback
+            el.style.background = '#d4edda';
+            setTimeout(() => el.style.background = 'white', 600);
+        });
+
+        list.appendChild(el);
+    });
+}
+
+// make grid cells draggable — patch into renderResults
+const _origRenderResults = window.renderResults;
+window.renderResults = function(data) {
+    _origRenderResults(data);
+    // add draggable to each thumb after render
+    document.querySelectorAll('.grid-cell').forEach((cell, i) => {
+        const url = data.images[i]?.url;
+        if (!url) return;
+        cell.draggable = true;
+        cell.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('photo-path', url.replace(/^\//, ''));
+            e.dataTransfer.effectAllowed = 'link';
+        });
+    });
+};
+
+// new album button
+document.getElementById('new-album-btn').addEventListener('click', async () => {
+    const name = prompt('Album name:');
+    if (!name) return;
+    
+    await fetch('/albums', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({name, path})
+    });
+    loadAlbums();
+});
+
+// ── ALBUM OVERLAY ──
+async function openAlbumOverlay(name) {
+    document.getElementById('album-overlay-title').textContent = name;
+    document.getElementById('album-overlay-count').textContent = '';
+    document.getElementById('album-overlay-grid').innerHTML = '';
+    document.getElementById('album-overlay').style.display = 'flex';
+
+    const resp = await fetch(`/albums/${encodeURIComponent(name)}/photos`);
+    const data = await resp.json();
+    document.getElementById('album-overlay-count').textContent = `${data.photos.length} photos`;
+
+    const grid = document.getElementById('album-overlay-grid');
+    data.photos.forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, '');
+        const cell = document.createElement('div');
+        cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
+        cell.innerHTML = `
+            <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
+            <div class="grid-overlay" style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.35) 0%,transparent 45%);opacity:0;transition:opacity 0.18s;padding:7px;display:flex;justify-content:space-between;align-items:flex-start;">
+                <button class="thumb-btn thumb-fav" title="Favorite">♥</button>
+                <button class="thumb-btn thumb-delete" title="Delete">✕</button>
+            </div>
+        `;
+        cell.querySelector('div').addEventListener('click', () => window.openLightbox(data.photos, i));
+        cell.addEventListener('mouseenter', () => cell.querySelector('.grid-overlay').style.opacity = '1');
+        cell.addEventListener('mouseleave', () => cell.querySelector('.grid-overlay').style.opacity = '0');
+
+        cell.querySelector('.thumb-fav').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isFav = window.toggleFavorite(url);
+            e.target.classList.toggle('fav-active', isFav);
+        });
+        cell.querySelector('.thumb-fav').classList.toggle('fav-active', window.getFavorites().includes(url));
+
+        cell.querySelector('.thumb-delete').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('Delete this photo?')) return;
+            const fd = new FormData();
+            fd.append('image_paths', url);
+            await fetch('/delete_photo', {method:'POST', body: fd});
+            cell.style.opacity = '0';
+            setTimeout(() => cell.remove(), 300);
+        });
+
+        grid.appendChild(cell);
+    });
+}
+
+document.getElementById('album-back').addEventListener('click', () => {
+    document.getElementById('album-overlay').style.display = 'none';
+});
+// ── REVIEW ──
+function getSeenPhotos() {
+    try { return new Set(JSON.parse(localStorage.getItem('review_seen') || '[]')); }
+    catch { return new Set(); }
+}
+function addSeenPhotos(urls) {
+    const seen = getSeenPhotos();
+    urls.forEach(u => seen.add(u));
+    localStorage.setItem('review_seen', JSON.stringify([...seen]));
+}
+function resetSeenPhotos() {
+    localStorage.removeItem('review_seen');
+}
+
+let reviewPhotos = [];
+
+async function loadReviewBatch() {
+    const seen = getSeenPhotos();
+    document.getElementById('review-exhausted').style.display = 'none';
+    document.getElementById('review-grid').style.display = 'grid';
+
+    const resp = await fetch(`/review/batch?seen=${encodeURIComponent([...seen].join(','))}`);
+    const data = await resp.json();
+
+    if (data.exhausted || data.photos.length === 0) {
+        document.getElementById('review-exhausted').style.display = 'flex';
+        document.getElementById('review-grid').style.display = 'none';
+        return;
+    }
+
+    reviewPhotos = data.photos;
+    addSeenPhotos(data.photos.map(p => p.url.replace(/^\//, '')));
+
+    const total = getSeenPhotos().size;
+    document.getElementById('review-progress').textContent = `${total} reviewed`;
+
+    const grid = document.getElementById('review-grid');
+    grid.innerHTML = '';
+
+    data.photos.forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, '');
+        const cell = document.createElement('div');
+        cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;opacity:0;transform:scale(0.94);transition:opacity 0.3s ease,transform 0.3s ease;';
+        cell.innerHTML = `
+            <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
+            <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.35) 0%,transparent 45%);opacity:0;transition:opacity 0.18s;padding:7px;display:flex;justify-content:flex-end;align-items:flex-start;">
+                <button class="thumb-btn thumb-delete" title="Delete">✕</button>
+            </div>
+        `;
+
+        cell.querySelector('div').addEventListener('click', (e) => {
+            if (e.target.closest('.thumb-btn')) return;
+            window.openLightbox(reviewPhotos, i);
+        });
+
+        const overlay = cell.querySelector('div + div');
+        cell.addEventListener('mouseenter', () => overlay.style.opacity = '1');
+        cell.addEventListener('mouseleave', () => overlay.style.opacity = '0');
+
+        cell.querySelector('.thumb-delete').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('Delete this photo?')) return;
+            const fd = new FormData();
+            fd.append('image_paths', url);
+            await fetch('/delete_photo', { method: 'POST', body: fd });
+            cell.style.opacity = '0';
+            cell.style.transform = 'scale(0.85)';
+            setTimeout(() => cell.remove(), 300);
+        });
+
+        grid.appendChild(cell);
+
+        // staggered appear
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                cell.style.opacity = '1';
+                cell.style.transform = 'scale(1)';
+            }, Math.min(i * 30, 500));
+        });
+    });
+}
+
+document.getElementById('review-next-btn').addEventListener('click', loadReviewBatch);
+document.getElementById('review-reset-btn').addEventListener('click', () => {
+    resetSeenPhotos();
+    loadReviewBatch();
+});
+
+// hook into setView
+const _origSetView = window.setView || setView;
+loadAlbums();
 window.renderFavStrip = renderFavStrip;
 window.addEventListener('storage', e => {
     if (e.key === 'mem_favorites') window.renderFavStrip();
@@ -1579,6 +1966,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => window.renderFavStrip?.(), 1000);
     }
 });
+
 </script>
 </body>
 </html>
