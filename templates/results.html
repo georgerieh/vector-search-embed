@@ -24,10 +24,8 @@
     btn.disabled = true;
     let dinoSession = null;
 
-    async function fetchWithProgress(url, onProgress, token=null) {
-        const response = await fetch(url, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-    });
+    async function fetchWithProgress(url, onProgress) {
+        const response = await fetch(url)
         const contentLength = response.headers.get('Content-Length');
         const total = contentLength ? parseInt(contentLength) : null;
         const reader = response.body.getReader();
@@ -60,8 +58,7 @@
         const display = Math.round(pct * 45); // DINO occupies 0–45%
         loadingBar.style.width = display + '%';
         loadingText.textContent = `Loading DINO... ${display}%`;
-    },
-    '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')  // add token param);
+    })  // add token param);
 
     dinoSession = await InferenceSession.create(dinoBuffer, {
         executionProviders: ['webgpu', 'wasm'],
@@ -74,7 +71,7 @@
         const display = 50 + Math.round(pct * 40); // FaceNet occupies 50–90%
         loadingBar.style.width = display + '%';
         loadingText.textContent = `Loading FaceNet... ${display}%`;
-    },'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');
+    });
 
     const faceNetSession = await InferenceSession.create(facenetBuffer, {
         executionProviders: ['webgpu', 'wasm'],
