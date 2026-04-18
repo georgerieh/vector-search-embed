@@ -58,7 +58,7 @@
         loadingText.textContent = `Loading DINO... ${display}%`;
     });
 
-    dinoSession = await ort.InferenceSession.create(dinoBuffer, {
+    dinoSession = await InferenceSession.create(dinoBuffer, {
         executionProviders: ['webgpu', 'wasm'],
     });
 
