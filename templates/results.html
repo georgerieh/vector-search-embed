@@ -1327,7 +1327,7 @@ async function loadStats() {
 
     function renderMonthChart(byMonth) {
     const el = document.getElementById('month-chart');
-    const valid = byMonth.filter(d => d.month && d.month.includes('-'));
+    const valid = byMonth.filter(d => d.month && d.month.includes(':'));
     if (!valid.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
     const max = Math.max(...valid.map(d => d.count));
     valid.forEach(d => {
@@ -1715,7 +1715,6 @@ async function loadMemory() {
             loadMemory();
         };
         hero.appendChild(heroDelete);
-        }
 
         const grid = document.getElementById('memory-grid');
         grid.innerHTML = '';
@@ -1764,6 +1763,12 @@ async function loadMemory() {
                 updateToolbar();
             }, 220);
         });
+            if (!document.getElementById('mem-selected-style')) {
+            const style = document.createElement('style');
+            style.id = 'mem-selected-style';
+            style.textContent = `.mem-selected .mem-check { display:flex !important; } .mem-selected .mem-border { border-color: #007aff !important; } .mem-selected { opacity: 0.85; }`;
+            document.head.appendChild(style);
+        }
         data.photos.slice(1).forEach((photo, i) => {
             const url = photo.url.replace(/^\//, '');
             const cell = document.createElement('div');
@@ -1775,10 +1780,7 @@ async function loadMemory() {
                 <div style="position:absolute;inset:0;border:3px solid transparent;border-radius:4px;transition:border-color 0.15s;" class="mem-border"></div>
             `;
 
-            // add selected style
-            const style = document.createElement('style');
-            style.textContent = `.mem-selected .mem-check { display:flex !important; } .mem-selected .mem-border { border-color: #007aff !important; } .mem-selected { opacity: 0.85; }`;
-            document.head.appendChild(style);
+
 
             cell.addEventListener('click', (e) => {
                 if (selected.size > 0 || e.shiftKey) {
