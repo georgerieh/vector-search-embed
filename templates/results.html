@@ -1331,7 +1331,7 @@ async function loadStats() {
     if (!valid.length) { el.innerHTML = '<span style="color:#8e8e93;font-size:12px">No data</span>'; return; }
     const max = Math.max(...valid.map(d => d.count));
     valid.forEach(d => {
-        const [year, month] = d.month.split('-');
+        const [year, month] = d.month.split(':');
             const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
             const pct = Math.round((d.count / max) * 100);
             const label = names[parseInt(month)-1] + ' ' + year.slice(2);
@@ -1434,7 +1434,7 @@ async function loadStats() {
 window.currentImages = [];
 window.currentView = 'grid';
 
-function setView(view) {
+window.setView = function(view) {
     window.currentView = view;
     ['grid','gallery','info','memory'].forEach(v =>
         document.getElementById(`btn-${v}`)?.classList.toggle('active', v === view)
@@ -1714,6 +1714,8 @@ async function loadMemory() {
             data.photos.splice(0, 1);
             loadMemory();
         };
+        hero.appendChild(heroDelete);
+        }
 
         const grid = document.getElementById('memory-grid');
         grid.innerHTML = '';
@@ -1762,7 +1764,6 @@ async function loadMemory() {
                 updateToolbar();
             }, 220);
         });
-
         data.photos.slice(1).forEach((photo, i) => {
             const url = photo.url.replace(/^\//, '');
             const cell = document.createElement('div');
@@ -1810,6 +1811,7 @@ async function loadMemory() {
 
         document.getElementById('memory-loading').style.display = 'none';
         document.getElementById('memory-content').style.display = 'block';
+    }
     } catch (err) {
         document.getElementById('memory-loading').innerHTML = 
             '<div style="font-size:14px;color:#ff3b30">Failed to load memory</div>';
