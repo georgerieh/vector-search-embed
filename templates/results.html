@@ -1747,8 +1747,7 @@ async function renderSavedCollections() {
     const resp = await fetch('/collections');
     const { collections } = await resp.json();
     const list = document.getElementById('saved-collections-list');
-    if (!collections.length) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
+    if (!list) return;
     list.innerHTML = '';
     if (currentMemory && currentMemory.photos && currentMemory.photos.length > 0) {
     const el = document.createElement('div');
