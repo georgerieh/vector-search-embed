@@ -161,7 +161,8 @@
             img.src = URL.createObjectURL(file);
         });
     }
-    let leafletMap = null, markerClusters = null;
+window.leafletMap = null;
+let markerClusters = null;
 
     function initMap() {
         if (leafletMap) return;
@@ -1453,6 +1454,7 @@
 </div>
  
 <script>
+    const gridSelected = new Set();
 fetch('/autocomplete')
     .then(r => r.json())
     .then(data => {
@@ -1686,7 +1688,7 @@ document.addEventListener('mousemove', e => {
     const newWidth = splitRect.right - e.clientX;
     const clampedWidth = Math.max(200, Math.min(newWidth, splitRect.width * 0.7));
     mapPane.style.width = clampedWidth + 'px';
-    if (leafletMap) leafletMap.invalidateSize();
+    if (window.leafletMap) window.leafletMap.invalidateSize();
 });
 document.addEventListener('mouseup', () => {
     if (!isResizing) return;
@@ -2283,6 +2285,8 @@ document.getElementById('review-reset-btn').addEventListener('click', () => {
 // hook into setView
 loadAlbums();
 window.renderFavStrip = renderFavStrip;
+   window.getFavorites = getFavorites;  // move this up too
+    window.toggleFavorite = toggleFavorite;
 window.addEventListener('storage', e => {
     if (e.key === 'mem_favorites') window.renderFavStrip();
 });
@@ -2294,8 +2298,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 100);
 });
-// ── GRID MULTISELECT ──
-const gridSelected = new Set();
 
 function updateGridToolbar() {
     const toolbar = document.getElementById('grid-select-toolbar');
