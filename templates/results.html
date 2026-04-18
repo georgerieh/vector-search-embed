@@ -2073,7 +2073,7 @@ document.getElementById('new-album-btn').addEventListener('click', async () => {
     await fetch('/albums', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({name, path})
+        body: JSON.stringify({name})
     });
     loadAlbums();
 });
