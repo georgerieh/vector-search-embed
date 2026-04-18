@@ -23,7 +23,28 @@
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
     let dinoSession = null;
-
+    function renderFavStrip() {
+        const strip = document.getElementById('fav-strip');
+        strip.innerHTML = '';
+        const favs = getFavorites();
+        if (favs.length === 0) {
+            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
+            return;
+        }
+        favs.slice(0, 16).forEach(url => {
+            const el = document.createElement('div');
+            el.className = 'fav-thumb';
+            el.style.backgroundImage = `url('/thumbnail/${url}')`;
+            el.title = url.split('/').pop();
+            el.addEventListener('click', () => {
+                const images = window.currentImages || [];
+                const i = images.findIndex(img => img.url.replace(/^\//, '') === url);
+                if (i >= 0) openLightbox(images, i);
+            });
+            strip.appendChild(el);
+        });
+    }
+    window.renderFavStrip = renderFavStrip;
     async function fetchWithProgress(url, onProgress) {
         const response = await fetch(url)
         const contentLength = response.headers.get('Content-Length');
@@ -137,7 +158,47 @@
             img.src = URL.createObjectURL(file);
         });
     }
+    let leafletMap = null, markerClusters = null;
 
+    function initMap() {
+        if (leafletMap) return;
+        leafletMap = L.map('map').setView([48.505, 2.33], 3);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(leafletMap);
+    }
+    let hexLayer = null;
+
+        function updateHexLayer() {
+            if (!leafletMap) return;
+            const zoom = leafletMap.getZoom();
+            // map zoom to h3 resolution
+            const res = zoom < 4 ? 3 : zoom < 6 ? 4 : zoom < 8 ? 5 : zoom < 10 ? 6 : 7;
+
+            fetch(`/hex_coverage?resolution=${res}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (hexLayer) leafletMap.removeLayer(hexLayer);
+                    const layers = [];
+                    data.cells.forEach(cell => {
+                        const boundary = h3.cellToBoundary(cell.h3).map(([lat, lng]) => [lat, lng]);
+                        const poly = L.polygon(boundary, {
+                            color: '#007aff',
+                            fillColor: '#007aff',
+                            fillOpacity: 0.08,
+                            weight: 1,
+                            opacity: 0.4,
+                        });
+                        poly.bindTooltip(`${cell.count} photos`, { sticky: true });
+                        poly.on('click', () => {
+                            navigator.clipboard.writeText(cell.h3);
+                            poly.setStyle({ fillOpacity: 0.25 });
+                            setTimeout(() => poly.setStyle({ fillOpacity: 0.08 }), 600);
+                        });
+                        layers.push(poly);
+                    });
+                    hexLayer = L.layerGroup(layers).addTo(leafletMap);
+                });
+        }
+    initMap();
     document.querySelector('form[name="input"]').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fileInput = document.getElementById('image-in');
@@ -254,7 +315,7 @@
     function updateLightbox() {
         const img = lightboxImages[lightboxIndex];
         const url = img.url.replace(/^\//, '');
-        document.getElementById('lightbox-img').src = `/thumbnail/${url}`;
+        document.getElementById('lightbox-img').src = `/files/${url}`;
         document.getElementById('lightbox-location').textContent = img.location || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
         document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(url));
@@ -278,47 +339,7 @@
     window.openLightbox = openLightbox;
 
     // ── MAP ──
-    let leafletMap = null, markerClusters = null;
-
-    function initMap() {
-        if (leafletMap) return;
-        leafletMap = L.map('map').setView([48.505, 2.33], 3);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(leafletMap);
-    }
-    let hexLayer = null;
-
-        function updateHexLayer() {
-            if (!leafletMap) return;
-            const zoom = leafletMap.getZoom();
-            // map zoom to h3 resolution
-            const res = zoom < 4 ? 3 : zoom < 6 ? 4 : zoom < 8 ? 5 : zoom < 10 ? 6 : 7;
-
-            fetch(`/hex_coverage?resolution=${res}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (hexLayer) leafletMap.removeLayer(hexLayer);
-                    const layers = [];
-                    data.cells.forEach(cell => {
-                        const boundary = h3.cellToBoundary(cell.h3).map(([lat, lng]) => [lat, lng]);
-                        const poly = L.polygon(boundary, {
-                            color: '#007aff',
-                            fillColor: '#007aff',
-                            fillOpacity: 0.08,
-                            weight: 1,
-                            opacity: 0.4,
-                        });
-                        poly.bindTooltip(`${cell.count} photos`, { sticky: true });
-                        poly.on('click', () => {
-                            navigator.clipboard.writeText(cell.h3);
-                            poly.setStyle({ fillOpacity: 0.25 });
-                            setTimeout(() => poly.setStyle({ fillOpacity: 0.08 }), 600);
-                        });
-                        layers.push(poly);
-                    });
-                    hexLayer = L.layerGroup(layers).addTo(leafletMap);
-                });
-        }
-
+    
     function updateMap(images) {
         initMap();
         leafletMap.on('zoomend moveend', updateHexLayer);
@@ -341,7 +362,14 @@
 
     // ── RENDER ──
     window.currentImages = [];
-
+    document.addEventListener('DOMContentLoaded', () => {
+    const interval = setInterval(() => {
+        if (window.initMap) {
+            window.initMap();
+            clearInterval(interval);
+        }
+    }, 100);
+    });
     window.renderResults = function(data) {
         window.currentImages = data.images;
         const grid = document.getElementById('photo-grid');
@@ -414,34 +442,13 @@
         updateMap(data.images);
 
         document.getElementById('empty-state').style.display = 'none';
-        document.getElementById('results-area').style.display = 'grid';
 
         // if in gallery view, rebuild
         if (window.currentView === 'gallery') buildGallery(data.images, 0);
     };
 
     // init favorites strip
-    function renderFavStrip() {
-        const strip = document.getElementById('fav-strip');
-        strip.innerHTML = '';
-        const favs = getFavorites();
-        if (favs.length === 0) {
-            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
-            return;
-        }
-        favs.slice(0, 16).forEach(url => {
-            const el = document.createElement('div');
-            el.className = 'fav-thumb';
-            el.style.backgroundImage = `url('/thumbnail/${url}')`;
-            el.title = url.split('/').pop();
-            el.addEventListener('click', () => {
-                const images = window.currentImages || [];
-                const i = images.findIndex(img => img.url.replace(/^\//, '') === url);
-                if (i >= 0) openLightbox(images, i);
-            });
-            strip.appendChild(el);
-        });
-    }
+    
 
     renderFavStrip();
 
@@ -1086,13 +1093,19 @@
         <div class="toolbar-info" id="toolbar-info"></div>
     </div>
     <div class="content-split" id="results-area">
-        <div class="grid-pane"><div id="photo-grid"></div></div>
+        <div class="grid-pane">
+            <div id="empty-state" style="display:flex;">
+                <div class="empty-icon"></div>
+                <div class="empty-text">Find your memories</div>
+                <div class="empty-sub">Search by photo similarity or date range</div>
+            </div>
+            <div id="photo-grid"></div>
+        </div>
         <div class="map-pane">
             <div class="resize-handle" id="resize-handle"></div>
             <div id="map"></div>
         </div>
     </div>
-        <div id="empty-state">
         <div class="empty-icon"></div>
         <div class="empty-text">Find your memories</div>
         <div class="empty-sub">Search by photo similarity or date range</div>
@@ -1429,7 +1442,7 @@ function setView(view) {
 
     const hasResults = window.currentImages.length > 0;
 
-    document.getElementById('results-area').style.display  = view === 'grid' && hasResults ? 'flex' : 'none';
+    document.getElementById('results-area').style.display = view === 'grid' ? 'flex' : 'none';
     document.getElementById('empty-state').style.display = view === 'grid' && !hasResults ? 'flex' : 'none';
     document.getElementById('gallery-pane').classList.toggle('active', view === 'gallery');
     document.getElementById('info-pane').style.display     = view === 'info' ? 'flex' : 'none';
@@ -1693,7 +1706,7 @@ async function loadMemory() {
         heroDelete.style.cssText = 'position:absolute;top:10px;right:10px;border:none;background:rgba(255,59,48,0.8);color:white;border-radius:50%;width:30px;height:30px;font-size:14px;cursor:pointer;z-index:10;';
         heroDelete.onclick = async (e) => {
             e.stopPropagation();
-            if (!confirm('Delete this photo?')) return;
+            if (!confirm('Permanently delete this photo from disk?')) return;
             const url = data.photos[0].url.replace(/^\//, '');
             const fd = new FormData();
             fd.append('image_paths', url);
@@ -1701,34 +1714,95 @@ async function loadMemory() {
             data.photos.splice(0, 1);
             loadMemory();
         };
-        hero.appendChild(heroDelete);
-        }
 
         const grid = document.getElementById('memory-grid');
         grid.innerHTML = '';
-        data.photos.slice(1).forEach((photo, i) => {
-            const url = photo.url.replace(/^\//, '');
-            const cell = document.createElement('div');
-            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
-            cell.innerHTML = `<div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>`;
-            cell.querySelector('div').addEventListener('click', () => {
-                if (window.openLightbox) window.openLightbox(data.photos, i + 1);
+                // multiselect state
+        const selected = new Set();
+
+        // toolbar
+        const toolbar = document.createElement('div');
+        toolbar.id = 'memory-select-toolbar';
+        toolbar.style.cssText = 'display:none;align-items:center;gap:10px;margin-bottom:10px;';
+        toolbar.innerHTML = `
+            <span id="memory-select-count" style="font-size:13px;color:#3c3c43;font-weight:500;"></span>
+            <button id="memory-deselect-all" style="border:none;background:#f2f2f7;color:#3c3c43;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Deselect all</button>
+            <button id="memory-delete-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✕ Remove selected</button>
+        `;
+        grid.before(toolbar);
+
+        function updateToolbar() {
+            toolbar.style.display = selected.size > 0 ? 'flex' : 'none';
+            document.getElementById('memory-select-count').textContent = `${selected.size} selected`;
+        }
+
+        document.getElementById('memory-deselect-all').addEventListener('click', () => {
+            selected.forEach(url => {
+                const cell = grid.querySelector(`[data-url="${url}"]`);
+                if (cell) cell.classList.remove('mem-selected');
             });
-            const delBtn = document.createElement('button');
-            delBtn.textContent = '✕';
-            delBtn.style.cssText = 'display:none;position:absolute;top:4px;right:4px;border:none;background:rgba(255,59,48,0.8);color:white;border-radius:50%;width:24px;height:24px;font-size:11px;cursor:pointer;z-index:10;';
-            delBtn.onclick = async (e) => {
-                e.stopPropagation();
-                if (!confirm('Delete this photo?')) return;
+            selected.clear();
+            updateToolbar();
+        });
+
+        document.getElementById('memory-delete-selected').addEventListener('click', async () => {
+            if (!confirm(`Permanently delete ${selected.size} photo(s) from disk?`)) return;
+            for (const url of selected) {
+                const cell = grid.querySelector(`[data-url="${url}"]`);
+                if (cell) { cell.style.opacity = '0'; cell.style.transform = 'scale(0.85)'; cell.style.transition = 'all 0.2s'; }
                 const fd = new FormData();
                 fd.append('image_paths', url);
                 await fetch('/delete_photo', { method: 'POST', body: fd });
-                cell.style.opacity = '0';
-                setTimeout(() => cell.remove(), 300);
-            };
-            cell.addEventListener('mouseenter', () => delBtn.style.display = 'block');
-            cell.addEventListener('mouseleave', () => delBtn.style.display = 'none');
-            cell.appendChild(delBtn);
+                const idx = data.photos.findIndex(p => p.url.replace(/^\//, '') === url);
+                if (idx >= 0) data.photos.splice(idx, 1);
+            }
+            setTimeout(() => {
+                selected.forEach(url => grid.querySelector(`[data-url="${url}"]`)?.remove());
+                selected.clear();
+                updateToolbar();
+            }, 220);
+        });
+
+        data.photos.slice(1).forEach((photo, i) => {
+            const url = photo.url.replace(/^\//, '');
+            const cell = document.createElement('div');
+            cell.dataset.url = url;
+            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;cursor:pointer;transition:opacity 0.2s,transform 0.2s;';
+            cell.innerHTML = `
+                <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;"></div>
+                <div class="mem-check" style="display:none;position:absolute;top:5px;left:5px;width:20px;height:20px;border-radius:50%;background:#007aff;border:2px solid white;align-items:center;justify-content:center;color:white;font-size:11px;">✓</div>
+                <div style="position:absolute;inset:0;border:3px solid transparent;border-radius:4px;transition:border-color 0.15s;" class="mem-border"></div>
+            `;
+
+            // add selected style
+            const style = document.createElement('style');
+            style.textContent = `.mem-selected .mem-check { display:flex !important; } .mem-selected .mem-border { border-color: #007aff !important; } .mem-selected { opacity: 0.85; }`;
+            document.head.appendChild(style);
+
+            cell.addEventListener('click', (e) => {
+                if (selected.size > 0 || e.shiftKey) {
+                    // in select mode — toggle
+                    if (selected.has(url)) {
+                        selected.delete(url);
+                        cell.classList.remove('mem-selected');
+                    } else {
+                        selected.add(url);
+                        cell.classList.add('mem-selected');
+                    }
+                    updateToolbar();
+                } else {
+                    // normal mode — open lightbox
+                    if (window.openLightbox) window.openLightbox(data.photos, i  1);
+                }
+            });
+
+            cell.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                selected.add(url);
+                cell.classList.add('mem-selected');
+                updateToolbar();
+            });
+
             grid.appendChild(cell);
         });
 
