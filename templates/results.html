@@ -167,6 +167,7 @@
         loadingText.textContent = `${data.images.length} results`;
         setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
         window.renderResults(data);
+        if (window.currentView === 'memory') loadMemory();
         return; // don't proceed to model inference
     }
 
@@ -210,6 +211,7 @@
     setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 800);
     btn.disabled = false;
     window.renderResults(data);
+    if (window.currentView === 'memory') loadMemory();
 });
 
     // ── FAVORITES ──
@@ -399,7 +401,7 @@
                         thumb.style.backgroundImage = `url('${url}')`;
                     }
                     observer.unobserve(thumb);
-                }, 
+                }
     });
 },{ rootMargin: '200px', threshold: 0 });
         grid.querySelectorAll('.grid-thumb').forEach(el => observer.observe(el));
@@ -1155,7 +1157,10 @@
                 ">↻ New Memory</button>
             </div>
         </div>
-
+        <div id="saved-collections-section" style="display:none;">
+            <div style="font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Saved Collections</div>
+            <div id="saved-collections-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+        </div>
         <!-- hero photo -->
         <div id="memory-hero" style="
             width:100%;
@@ -1176,11 +1181,6 @@
             margin-bottom:20px;
         "></div>
 
-        <!-- saved collections -->
-        <div id="saved-collections-section" style="display:none;">
-            <div style="font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Saved Collections</div>
-            <div id="saved-collections-list" style="display:flex; flex-direction:column; gap:8px;"></div>
-        </div>
     </div>
 </div>
 <div id="review-pane" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:#f2f2f7;">
@@ -1523,54 +1523,150 @@ document.addEventListener('mouseup', () => {
 // ── MEMORY ──
 let currentMemory = null;
 
-function getSavedCollections() {
-    try { return JSON.parse(localStorage.getItem('mem_collections') || '[]'); }
-    catch { return []; }
-}
-
-function saveCollection(memory) {
-    const collections = getSavedCollections();
-    collections.unshift({
-        id: Date.now(),
-        title: memory.title,
-        subtitle: memory.subtitle,
-        savedAt: new Date().toLocaleDateString(),
-        urls: memory.photos.map(p => p.url).slice(0, 6), // store first 6 for preview
+async function saveCollection(memory) {
+    const name = `${memory.title} — ${new Date().toLocaleDateString()}`;
+    await fetch('/collections', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name,
+            urls: memory.photos.map(p => p.url),
+        })
     });
-    localStorage.setItem('mem_collections', JSON.stringify(collections.slice(0, 20)));
-    renderSavedCollections();
+    await renderSavedCollections();
 }
-
-function renderSavedCollections() {
-    const collections = getSavedCollections();
+async function renderSavedCollections() {
+    const resp = await fetch('/collections');
+    const { collections } = await resp.json();
     const section = document.getElementById('saved-collections-section');
     const list = document.getElementById('saved-collections-list');
     if (!collections.length) { section.style.display = 'none'; return; }
     section.style.display = 'block';
     list.innerHTML = '';
+    if (currentMemory && currentMemory.photos && currentMemory.photos.length > 0) {
+    const el = document.createElement('div');
+    el.style.cssText = 'background:#f0f7ff;border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:background 0.15s;';
+    el.innerHTML = `
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+            ${currentMemory.photos.slice(0,3).map(p => {
+                const url = p.url.replace(/^\//, '');
+                return `<div style="width:44px;height:44px;border-radius:8px;background:url('/thumbnail/${url}') center/cover;"></div>`;
+            }).join('')}
+        </div>
+        <div style="flex:1;min-width:0;">
+            <div style="font-size:11px;font-weight:600;color:#007aff;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Current</div>
+            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${currentMemory.title}</div>
+            <div style="font-size:11px;color:#8e8e93;">${currentMemory.photos.length} photos</div>
+        </div>
+        <button id="current-memory-save" style="border:none;background:#007aff;color:white;border-radius:8px;font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;flex-shrink:0;">Save</button>
+    `;
+    el.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        // scroll back to memory content
+        document.getElementById('memory-content').scrollIntoView({ behavior: 'smooth' });
+    });
+    el.querySelector('button').addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await saveCollection(currentMemory);
+        e.target.textContent = '✓';
+        e.target.style.background = '#34c759';
+    });
+    list.appendChild(el);
+}
+
+if (!collections.length) return;
     collections.forEach(col => {
         const el = document.createElement('div');
-        el.style.cssText = 'background:white;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);';
+        el.style.cssText = 'background:white;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:background 0.15s;';
         el.innerHTML = `
             <div style="display:flex;gap:3px;flex-shrink:0;">
-                ${col.urls.slice(0,3).map(url => `<div style="width:36px;height:36px;border-radius:6px;background:url('/thumbnail/${url}') center/cover;"></div>`).join('')}
+                ${col.preview.map(url => `<div style="width:44px;height:44px;border-radius:8px;background:url('/thumbnail/${url}') center/cover;"></div>`).join('')}
             </div>
             <div style="flex:1;min-width:0;">
                 <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${col.title}</div>
-                <div style="font-size:11px;color:#8e8e93;">${col.savedAt} · ${col.subtitle}</div>
+                <div style="font-size:11px;color:#8e8e93;">${col.count} photos</div>
             </div>
-            <button data-id="${col.id}" style="border:none;background:none;color:#ff3b30;font-size:16px;cursor:pointer;padding:4px;">✕</button>
+            <button data-name="${col.name}" style="border:none;background:none;color:#ff3b30;font-size:16px;cursor:pointer;padding:4px 8px;flex-shrink:0;">✕</button>
         `;
-        el.querySelector('button').addEventListener('click', e => {
-            const id = parseInt(e.target.dataset.id);
-            const updated = getSavedCollections().filter(c => c.id !== id);
-            localStorage.setItem('mem_collections', JSON.stringify(updated));
+
+        // open on click (but not delete button)
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            openSavedCollection(col);
+        });
+        el.addEventListener('mouseenter', () => el.style.background = '#f2f2f7');
+        el.addEventListener('mouseleave', () => el.style.background = 'white');
+
+        el.querySelector('button').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const name = e.target.dataset.name;
+            if (!confirm(`Delete collection "${name}"?`)) return;
+            await fetch(`/collections/${encodeURIComponent(name)}`, {method: 'DELETE'});
             renderSavedCollections();
         });
         list.appendChild(el);
     });
 }
+function openSavedCollection(col) {
+    // reuse memory-content UI but populate from saved data
+    document.getElementById('memory-title').textContent = col.title;
+    document.getElementById('memory-subtitle').textContent = col.savedAt + ' · ' + col.subtitle;
 
+    document.getElementById('memory-loading').style.display = 'flex';
+    document.getElementById('memory-content').style.display = 'none';
+    const resp = await fetch(`/collections/${encodeURIComponent(col.name)}/photos`);
+    const data = await resp.json();
+    const photos = data.photos;
+
+    if (photos.length > 0) {
+        const heroUrl = photos[0].url.replace(/^\//, '');
+        const hero = document.getElementById('memory-hero');
+        hero.style.backgroundImage = `url('/files/${heroUrl}')`;
+        hero.onclick = () => window.openLightbox && window.openLightbox(photos, 0);
+    }
+
+    const grid = document.getElementById('memory-grid');
+    grid.innerHTML = '';
+        photos.slice(1).forEach((photo, i) => {
+            const url = photo.url.replace(/^\//, '');
+            const cell = document.createElement('div');
+            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
+            cell.innerHTML = `
+                <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
+                <button style="
+                    display:none;position:absolute;top:4px;right:4px;
+                    border:none;background:rgba(255,59,48,0.8);color:white;
+                    border-radius:50%;width:24px;height:24px;font-size:11px;cursor:pointer;z-index:10;
+                ">✕</button>
+            `;
+            cell.querySelector('div').addEventListener('click', () => {
+                if (window.openLightbox) window.openLightbox(photos, i + 1);
+            });
+            cell.querySelector('button').addEventListener('click', (e) => {
+                e.stopPropagation();
+                photos.splice(i + 1, 1);
+                cell.style.opacity = '0';
+                cell.style.transform = 'scale(0.85)';
+                cell.style.transition = 'all 0.2s';
+                setTimeout(() => cell.remove(), 200);
+            });
+            cell.addEventListener('mouseenter', () => cell.querySelector('button').style.display = 'block');
+            cell.addEventListener('mouseleave', () => cell.querySelector('button').style.display = 'none');
+            grid.appendChild(cell);
+        });
+    // swap save button to "back"
+    const saveBtn = document.getElementById('memory-save-btn');
+    const origText = '♥ Save Collection';
+    saveBtn.textContent = '‹ Back';
+    saveBtn.onclick = () => {
+        saveBtn.textContent = origText;
+        saveBtn.onclick = null;
+        loadMemory(); // reload a fresh memory
+    };
+
+    document.getElementById('memory-loading').style.display = 'none';
+    document.getElementById('memory-content').style.display = 'block';
+}
 async function loadMemory() {
     document.getElementById('memory-loading').style.display = 'flex';
     document.getElementById('memory-content').style.display = 'none';
@@ -1634,7 +1730,7 @@ async function loadMemory() {
             grid.appendChild(cell);
         });
 
-        renderSavedCollections();
+        await renderSavedCollections();
 
         document.getElementById('memory-loading').style.display = 'none';
         document.getElementById('memory-content').style.display = 'block';
@@ -1645,9 +1741,9 @@ async function loadMemory() {
     }
 }
 
-document.getElementById('memory-save-btn').addEventListener('click', () => {
+document.getElementById('memory-save-btn').addEventListener('click', async () => {
     if (currentMemory) {
-        saveCollection(currentMemory);
+        await saveCollection(currentMemory);
         document.getElementById('memory-save-btn').textContent = '✓ Saved!';
         setTimeout(() => { document.getElementById('memory-save-btn').textContent = '♥ Save Collection'; }, 2000);
     }
@@ -1788,9 +1884,10 @@ function renderAlbumList(albums) {
 const _origRenderResults = window.renderResults;
 window.renderResults = function(data) {
     _origRenderResults(data);
-    // add draggable to each thumb after render
-    document.querySelectorAll('.grid-cell').forEach((cell, i) => {
-        const url = data.images[i]?.url;
+    const cells = document.querySelectorAll('.grid-cell');
+    cells.forEach(function(cell, i) {
+        if (!data.images[i]) return;
+        const url = data.images[i].url;
         if (!url) return;
         cell.draggable = true;
         cell.addEventListener('dragstart', (e) => {
@@ -1960,13 +2057,13 @@ window.addEventListener('storage', e => {
     if (e.key === 'mem_favorites') window.renderFavStrip();
 });
 document.addEventListener('DOMContentLoaded', () => {
-    if (window.renderFavStrip) window.renderFavStrip();
-    else {
-        // module might not be ready yet, retry
-        setTimeout(() => window.renderFavStrip?.(), 1000);
-    }
+    const interval = setInterval(() => {
+        if (window.renderFavStrip) {
+            window.renderFavStrip();
+            clearInterval(interval);
+        }
+    }, 100);
 });
-
 </script>
 </body>
 </html>
