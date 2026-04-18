@@ -1106,10 +1106,6 @@
             <div id="map"></div>
         </div>
     </div>
-        <div class="empty-icon"></div>
-        <div class="empty-text">Find your memories</div>
-        <div class="empty-sub">Search by photo similarity or date range</div>
-    </div>
 
     <div class="gallery-pane" id="gallery-pane">
         <div class="gallery-main" id="gallery-main">
@@ -2130,8 +2126,6 @@ document.getElementById('review-reset-btn').addEventListener('click', () => {
 });
 
 // hook into setView
-const _origSetView = window.setView || setView;
-window.setView = setView;
 loadAlbums();
 window.renderFavStrip = renderFavStrip;
 window.addEventListener('storage', e => {
