@@ -487,22 +487,6 @@ let markerClusters = null;
     const offset = window.currentImages.length;
     window.currentImages.push(...images);
     document.getElementById('empty-state').style.display = 'none';
-    // show count + "view all" button
-        const header = document.createElement('div');
-        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
-        header.innerHTML = `
-            <span style="font-size:11px;color:#8e8e93;">${favs.length} favorites</span>
-            <button id="fav-view-all" style="border:none;background:none;color:#007aff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">View all</button>
-        `;
-        strip.appendChild(header);
-        if (favs.length > 16) {
-            const more = document.createElement('div');
-            more.style.cssText = 'font-size:11px;color:#8e8e93;text-align:center;margin-top:4px;cursor:pointer;';
-            more.textContent = `+${favs.length - 16} more`;
-            more.addEventListener('click', openFavoritesOverlay);
-            strip.appendChild(more);
-        }
-        header.querySelector('#fav-view-all').addEventListener('click', openFavoritesOverlay);
     images.forEach((img, i) => {
         const url = img.url.replace(/^\//, '');
         const isFav = favs.includes(url);
