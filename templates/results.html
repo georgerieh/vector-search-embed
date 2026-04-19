@@ -232,97 +232,63 @@ let markerClusters = null;
     const hasImage = fileInput.files.length > 0;
     const hasFilters = startDate || endDate || country || city || h3cell;
 
-    // if no image, skip model entirely and search directly
-    if (!hasImage && hasFilters) {
-        document.getElementById('loading-container').style.display = 'block';
-        loadingBar.style.width = '50%';
-        loadingText.textContent = 'Searching...';
-        window.currentImages = [];
-        document.getElementById('photo-grid').innerHTML = '';
+    if (!hasImage && !hasFilters && !selectedFaceEmbedding) return;
 
-        const response = await fetch('/search_stream', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ embedding: null, facenet_embedding: null,
-                                   start_date: startDate, end_date: endDate, limit,
-                                   country, city, h3cell })
-        });
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const {done, value} = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, {stream: true});
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // incomplete last line
-    for (const line of lines) {
-        if (!line) continue;
-        const chunk = JSON.parse(line);
-        // append to existing results instead of replacing
-        window.renderChunk(chunk.images);
-    }
-}
-     loadingBar.style.width = '100%';
-        loadingText.textContent = `${window.currentImages.length} results`;
-        setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
-        setView('grid');
-        return;
-    }
-
-    // image search — needs models
     document.getElementById('loading-container').style.display = 'block';
-    loadingBar.style.width = '0%';
-    btn.disabled = true;
+    window.currentImages = [];
+    document.getElementById('photo-grid').innerHTML = '';
 
     let embedding = null, facenetEmbedding = null;
 
     if (hasImage) {
+        loadingBar.style.width = '0%';
+        btn.disabled = true;
         const img = await loadImage(fileInput.files[0]);
-            loadingText.textContent = 'Computing visual embedding...';
-            loadingBar.style.width = '30%';
-            const dinoResults = await dinoSession.run({ pixel_values: preprocessDino(img) });
-            embedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
-            loadingBar.style.width = '60%';
+        loadingText.textContent = 'Computing visual embedding...';
+        loadingBar.style.width = '30%';
+        const dinoResults = await dinoSession.run({ pixel_values: preprocessDino(img) });
+        embedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
+        loadingBar.style.width = '60%';
 
-            loadingText.textContent = 'Detecting faces...';
-            const detection = faceDetector.detect(img);
-            if (detection.detections.length > 0) {
-                loadingText.textContent = 'Recognizing face...';
-                loadingBar.style.width = '80%';
-                const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
-                const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
-                facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
-                // crop face for modal
-                const cropCanvas = document.createElement('canvas');
-                cropCanvas.width = 160; cropCanvas.height = 160;
-                const cropCtx = cropCanvas.getContext('2d');
-                const box = best.boundingBox;
-                cropCtx.drawImage(img, box.originX, box.originY, box.width, box.height, 0, 0, 160, 160);
+        loadingText.textContent = 'Detecting faces...';
+        const detection = faceDetector.detect(img);
+        if (detection.detections.length > 0) {
+            loadingText.textContent = 'Recognizing face...';
+            loadingBar.style.width = '80%';
+            const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
+            const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
+            facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
 
-                // check if this face is already saved
-                const isKnown = savedFaces.some(f => {
-                    const dot = f.embedding.reduce((s,v,i) => s + v * facenetEmbedding[i], 0);
-                    return dot > 0.7; // cosine similarity threshold
-                });
-                if (!isKnown) {
-                    showFaceModal(facenetEmbedding, cropCanvas);
-                }
-             }
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = 160; cropCanvas.height = 160;
+            const cropCtx = cropCanvas.getContext('2d');
+            const box = best.boundingBox;
+            cropCtx.drawImage(img, box.originX, box.originY, box.width, box.height, 0, 0, 160, 160);
+
+            const isKnown = savedFaces.some(f => {
+                const dot = f.embedding.reduce((s,v,i) => s + v * facenetEmbedding[i], 0);
+                return dot > 0.7;
+            });
+            if (!isKnown) {
+                showFaceModal(facenetEmbedding, cropCanvas);
             }
-            URL.revokeObjectURL(img.src);
-    })
-
-     window.currentImages = [];
-    document.getElementById('photo-grid').innerHTML = '';
+        }
+        URL.revokeObjectURL(img.src);
+        btn.disabled = false;
+    } else {
+        loadingBar.style.width = '50%';
+        loadingText.textContent = 'Searching...';
+    }
 
     const response = await fetch('/search_stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding || selectedFaceEmbedding,
-                               start_date: startDate, end_date: endDate, limit,
-                               country, city, h3cell }),
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            embedding,
+            facenet_embedding: facenetEmbedding || selectedFaceEmbedding,
+            start_date: startDate, end_date: endDate, limit,
+            country, city, h3cell
+        })
     });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -340,9 +306,8 @@ let markerClusters = null;
         }
     }
     loadingBar.style.width = '100%';
-    loadingText.textContent = `${window.currentImages.length} memories found`;
-    setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 800);
-    btn.disabled = false;
+    loadingText.textContent = `${window.currentImages.length} results`;
+    setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
     setView('grid');
 });
 
