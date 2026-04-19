@@ -298,20 +298,36 @@ let markerClusters = null;
             URL.revokeObjectURL(img.src);
     }
 
-    const resp = await fetch('/search', {
+     window.currentImages = [];
+    document.getElementById('photo-grid').innerHTML = '';
+
+    const response = await fetch('/search_stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding,
                                start_date: startDate, end_date: endDate, limit,
                                country, city, h3cell }),
     });
-    const data = await resp.json();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream: true});
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+            if (!line) continue;
+            const chunk = JSON.parse(line);
+            window.renderChunk(chunk.images);
+        }
+    }
     loadingBar.style.width = '100%';
-    loadingText.textContent = `${data.images.length} memories found`;
+    loadingText.textContent = `${window.currentImages.length} memories found`;
     setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 800);
     btn.disabled = false;
-    window.renderResults(data);
-    if (window.currentView === 'memory') loadMemory();
+    setView('grid');
 });
 
    // disk-backed favorites, localStorage as cache only
@@ -1541,7 +1557,7 @@ async function openFavoritesOverlay() {
         ">Start over</button>
     </div>
 </div>
-<div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7;">
+<div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7; min-width:0;">
             <div id="info-tab">
     <div class="info-header">
         <span class="info-title">Your Library</span>
