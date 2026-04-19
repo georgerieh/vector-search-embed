@@ -247,18 +247,12 @@ let markerClusters = null;
         const dinoResults = await dinoSession.run({ pixel_values: preprocessDino(img) });
         embedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
         loadingBar.style.width = '60%';
-
+        if (document.getElementById('detect-faces').checked) {
         loadingText.textContent = 'Detecting faces...';
        // resize for face detection — mediapipe struggles with large images
-        const detectCanvas = document.createElement('canvas');
-        const maxDim = 640;
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        detectCanvas.width = img.width * scale;
-        detectCanvas.height = img.height * scale;
-        detectCanvas.getContext('2d').drawImage(img, 0, 0, detectCanvas.width, detectCanvas.height);
         let detection;
         try {
-            detection = faceDetector.detect(detectCanvas);
+            detection = faceDetector.detect(img);
         } catch (e) {
             console.warn('Face detection failed:', e);
             detection = { detections: [] };
@@ -268,15 +262,8 @@ let markerClusters = null;
             loadingBar.style.width = '80%';
             const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
             // scale bounding box back to original image dimensions
-            const scaleX = img.width / detectCanvas.width;
-            const scaleY = img.height / detectCanvas.height;
-            const scaledBox = {
-                originX: best.boundingBox.originX * scaleX,
-                originY: best.boundingBox.originY * scaleY,
-                width: best.boundingBox.width * scaleX,
-                height: best.boundingBox.height * scaleY,
-            };
-            const faceResults = await faceNetSession.run({ input: preprocessFace(img, scaledBox) });
+            const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
+
             facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
 
             const cropCanvas = document.createElement('canvas');
@@ -293,6 +280,7 @@ let markerClusters = null;
                 showFaceModal(facenetEmbedding, cropCanvas, 10000);
             }
         }
+    }
         URL.revokeObjectURL(img.src);
         btn.disabled = false;
     } else {
@@ -1431,6 +1419,10 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
     <div id="face-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
     <div id="no-faces-msg" style="font-size:11px;color:#8e8e93;">No saved faces yet</div>
 </div>
+<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#3c3c43;cursor:pointer;">
+    <input type="checkbox" id="detect-faces" style="cursor:pointer;">
+    Detect faces
+</label>
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
              <button type="button" id="clear-btn" class="search-btn" style="background:#f2f2f7;color:#3c3c43;">Clear</button>
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
