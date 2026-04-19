@@ -283,7 +283,7 @@ let markerClusters = null;
                 return dot > 0.7;
             });
             if (!isKnown) {
-                showFaceModal(facenetEmbedding, cropCanvas);
+                await showFaceModal(facenetEmbedding, cropCanvas);
             }
         }
         URL.revokeObjectURL(img.src);
@@ -783,6 +783,16 @@ async function openFavoritesOverlay() {
     }
 
     function showFaceModal(faceEmbedding, croppedCanvas) {
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                modal.style.display = 'none';
+                resolve();
+            }, 30000);
+
+            const done = () => {
+                clearTimeout(timeout);
+                resolve();
+            };
         const modal = document.getElementById('face-modal');
         const canvas = document.getElementById('face-crop-canvas');
         const ctx = canvas.getContext('2d');
@@ -804,13 +814,16 @@ async function openFavoritesOverlay() {
             });
             modal.style.display = 'none';
             loadFaces();
+            done();
         };
         document.getElementById('face-modal-cancel').onclick = () => {
             modal.style.display = 'none';
+            done();
         };
         document.getElementById('face-name-input').addEventListener('keydown', e => {
             if (e.key === 'Enter') document.getElementById('face-modal-save').click();
         });
+    })
     }
 
     loadFaces();
@@ -1412,6 +1425,7 @@ async function openFavoritesOverlay() {
     <div id="no-faces-msg" style="font-size:11px;color:#8e8e93;">No saved faces yet</div>
 </div>
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
+             <button type="button" id="clear-btn" class="search-btn" style="background:#f2f2f7;color:#3c3c43;">Clear</button>
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
         </form>
         <div id="ref-preview" style="display:none; margin-top:4px;">
@@ -1961,12 +1975,12 @@ function buildGallery(images, startIndex) {
         const url = img.url.replace(/^\//, '');
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
-        photo.style.backgroundImage = `url('/thumbnail/${url}')`;
+        photo.style.backgroundImage = `url('/files/${url}')`;
         main.insertBefore(photo, main.querySelector('.gallery-controls'));
 
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
-        thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
+        thumb.style.backgroundImage = `url('/files/${url}')`;
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
@@ -2702,7 +2716,20 @@ document.getElementById('grid-fav-selected').addEventListener('click', () => {
         clearGridSelection();
     }, 800);
 });
-
+document.getElementById('clear-btn').addEventListener('click', () => {
+    document.getElementById('start-date').value = '';
+    document.getElementById('end-date').value = '';
+    document.getElementById('country-filter').value = '';
+    document.getElementById('city-filter').value = '';
+    document.getElementById('h3-filter').value = '';
+    document.getElementById('limit').value = '';
+    document.getElementById('image-in').value = '';
+    document.getElementById('file-label-text').textContent = 'Search by photo';
+    document.getElementById('ref-preview').style.display = 'none';
+    // clear selected face
+    selectedFaceEmbedding = null;
+    document.querySelectorAll('#face-selector img').forEach(i => i.style.borderColor = 'transparent');
+});
 document.getElementById('grid-delete-selected').addEventListener('click', async () => {
     if (!confirm(`Permanently delete ${gridSelected.size} photo(s)?`)) return;
     for (const url of gridSelected) {
