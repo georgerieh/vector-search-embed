@@ -1746,6 +1746,7 @@ fetch('/autocomplete')
 const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 async function loadStats() {
+        document.getElementById('info-pane').scrollTop = 0;
         document.getElementById('info-loading').style.display = 'flex';
         document.getElementById('info-content').style.display = 'none';
         const data = window._statsData || await fetch('/stats').then(r => r.json());
@@ -1939,9 +1940,12 @@ window.setView = function(view) {
     document.getElementById('info-pane').style.display     = view === 'info' ? 'flex' : 'none';
     document.getElementById('memory-pane').style.display   = view === 'memory' ? 'flex' : 'none';
     document.getElementById('review-pane').style.display   = view === 'review' ? 'flex' : 'none';
+    document.querySelector('.sidebar').style.display = view === 'info' ? 'none' : '';
+    document.querySelector('.main').style.marginLeft = view === 'info' ? '0' : '260px';
 
     if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 0);
     if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
+    if (view === 'info') { document.getElementById('info-pane').scrollTop = 0; }
     if (view === 'memory') loadMemory();
     if (view === 'review' && !document.getElementById('review-grid').children.length) loadReviewBatch();
 }
