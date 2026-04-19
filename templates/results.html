@@ -52,10 +52,7 @@
         const reader = response.body.getReader();
         const chunks = [];
         let received = 0;
-        window.currentImages = [];
-        document.getElementById('photo-grid').innerHTML = '';
-        clearGridSelection();
-        document.getElementById('empty-state').style.display = 'none';
+        
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -237,6 +234,7 @@ let markerClusters = null;
     document.getElementById('loading-container').style.display = 'block';
     window.currentImages = [];
     document.getElementById('photo-grid').innerHTML = '';
+    clearGridSelection();
 
     let embedding = null, facenetEmbedding = null;
 
