@@ -283,7 +283,7 @@ let markerClusters = null;
                 return dot > 0.7;
             });
             if (!isKnown) {
-                await showFaceModal(facenetEmbedding, cropCanvas);
+                showFaceModal(facenetEmbedding, cropCanvas, 10000);
             }
         }
         URL.revokeObjectURL(img.src);
@@ -782,12 +782,12 @@ async function openFavoritesOverlay() {
         });
     }
 
-    function showFaceModal(faceEmbedding, croppedCanvas) {
+function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         return new Promise((resolve) => {
             const timeout = setTimeout(() => {
                 modal.style.display = 'none';
                 resolve();
-            }, 30000);
+            }, autoClose);
 
             const done = () => {
                 clearTimeout(timeout);
