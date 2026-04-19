@@ -2069,7 +2069,7 @@ async function openSavedCollection(col) {
                 else { selected.add(url); cell.classList.add('mem-selected'); }
                 updateCollectionToolbar();
             } else {
-                if (window.openLightbox) window.openLightbox(photos, i  1);
+                if (window.openLightbox) window.openLightbox(photos, i + 1);
             }
         });
         cell.addEventListener('contextmenu', (e) => {
