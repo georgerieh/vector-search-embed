@@ -260,7 +260,7 @@ let markerClusters = null;
         detectCanvas.getContext('2d').drawImage(img, 0, 0, detectCanvas.width, detectCanvas.height);
         let detection;
         try {
-            detection = faceDetector.detect(detectImg);
+            detection = faceDetector.detect(detectCanvas);
         } catch (e) {
             console.warn('Face detection failed:', e);
             detection = { detections: [] };
