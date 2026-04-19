@@ -294,6 +294,22 @@ let markerClusters = null;
                 const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
                 const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
                 facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
+                // crop face for modal
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = 160; cropCanvas.height = 160;
+                const cropCtx = cropCanvas.getContext('2d');
+                const box = best.boundingBox;
+                cropCtx.drawImage(img, box.originX, box.originY, box.width, box.height, 0, 0, 160, 160);
+
+                // check if this face is already saved
+                const isKnown = savedFaces.some(f => {
+                    const dot = f.embedding.reduce((s,v,i) => s + v * facenetEmbedding[i], 0);
+                    return dot > 0.7; // cosine similarity threshold
+                });
+                if (!isKnown) {
+                    showFaceModal(facenetEmbedding, cropCanvas);
+                }
+             }
             }
             URL.revokeObjectURL(img.src);
     }
@@ -304,7 +320,7 @@ let markerClusters = null;
     const response = await fetch('/search_stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding,
+        body: JSON.stringify({ embedding, facenet_embedding: facenetEmbedding || selectedFaceEmbedding,
                                start_date: startDate, end_date: endDate, limit,
                                country, city, h3cell }),
     });
@@ -736,6 +752,90 @@ async function openFavoritesOverlay() {
     document.getElementById('fav-overlay-close').addEventListener('click', () => {
         document.getElementById('favorites-overlay').style.display = 'none';
     });
+    let savedFaces = [];
+    let selectedFaceEmbedding = null;
+
+    async function loadFaces() {
+        const resp = await fetch('/faces');
+        const { faces } = await resp.json();
+        savedFaces = faces;
+        renderFaceSelector();
+    }
+
+    function renderFaceSelector() {
+        const container = document.getElementById('face-selector');
+        const msg = document.getElementById('no-faces-msg');
+        container.innerHTML = '';
+        if (!savedFaces.length) { msg.style.display = 'block'; return; }
+        msg.style.display = 'none';
+        savedFaces.forEach(face => {
+            const el = document.createElement('div');
+            el.style.cssText = 'position:relative;cursor:pointer;';
+            el.innerHTML = `
+                <img src="${face.thumbnail}" style="
+                    width:44px;height:44px;border-radius:50%;object-fit:cover;
+                    border:2px solid transparent;transition:border-color 0.15s;
+                " title="${face.name}">
+                <div style="font-size:9px;text-align:center;color:#8e8e93;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:44px;">${face.name}</div>
+            `;
+            const img = el.querySelector('img');
+            el.addEventListener('click', () => {
+                if (selectedFaceEmbedding === face.embedding) {
+                    selectedFaceEmbedding = null;
+                    img.style.borderColor = 'transparent';
+                } else {
+                    selectedFaceEmbedding = face.embedding;
+                    // deselect others
+                    container.querySelectorAll('img').forEach(i => i.style.borderColor = 'transparent');
+                    img.style.borderColor = '#007aff';
+                }
+            });
+            // long press to delete
+            let pressTimer;
+            el.addEventListener('mousedown', () => {
+                pressTimer = setTimeout(async () => {
+                    if (!confirm(`Delete face "${face.name}"?`)) return;
+                    await fetch(`/faces/${face.id}`, {method:'DELETE'});
+                    loadFaces();
+                }, 800);
+            });
+            el.addEventListener('mouseup', () => clearTimeout(pressTimer));
+            container.appendChild(el);
+        });
+    }
+
+    function showFaceModal(faceEmbedding, croppedCanvas) {
+        const modal = document.getElementById('face-modal');
+        const canvas = document.getElementById('face-crop-canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 160, 160);
+        ctx.drawImage(croppedCanvas, 0, 0, 160, 160);
+        modal.style.display = 'flex';
+
+        document.getElementById('face-name-input').value = '';
+        document.getElementById('face-name-input').focus();
+
+        document.getElementById('face-modal-save').onclick = async () => {
+            const name = document.getElementById('face-name-input').value.trim();
+            if (!name) { document.getElementById('face-name-input').focus(); return; }
+            const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+            await fetch('/faces', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({name, embedding: faceEmbedding, thumbnail})
+            });
+            modal.style.display = 'none';
+            loadFaces();
+        };
+        document.getElementById('face-modal-cancel').onclick = () => {
+            modal.style.display = 'none';
+        };
+        document.getElementById('face-name-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter') document.getElementById('face-modal-save').click();
+        });
+    }
+
+    loadFaces();
     </script>
 
     <style>
@@ -1328,6 +1428,11 @@ async function openFavoritesOverlay() {
     <span class="field-label">H3 Cell</span>
     <input class="field-input" id="h3-filter" placeholder="H3 hex ID...">
 </div>
+<div class="field-group">
+    <span class="field-label">Search by face</span>
+    <div id="face-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
+    <div id="no-faces-msg" style="font-size:11px;color:#8e8e93;">No saved faces yet</div>
+</div>
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
         </form>
@@ -1786,6 +1891,36 @@ async function loadStats() {
         gap:3px;
         align-content:start;
     "></div>
+</div>
+<div id="face-modal" style="
+    display:none;position:fixed;inset:0;
+    background:rgba(0,0,0,0.7);
+    z-index:3000;align-items:center;justify-content:center;
+    backdrop-filter:blur(10px);
+">
+    <div style="
+        background:white;border-radius:20px;padding:24px;
+        width:320px;display:flex;flex-direction:column;align-items:center;gap:16px;
+        box-shadow:0 40px 100px rgba(0,0,0,0.4);
+    ">
+        <div style="font-size:17px;font-weight:600;">Face detected</div>
+        <canvas id="face-crop-canvas" width="160" height="160" style="border-radius:50%;border:3px solid #007aff;"></canvas>
+        <div style="font-size:13px;color:#8e8e93;text-align:center;">Save this face to search for similar photos?</div>
+        <input id="face-name-input" placeholder="Enter a name..." style="
+            width:100%;padding:10px 12px;border:1px solid #e5e5ea;
+            border-radius:10px;font-size:14px;font-family:inherit;outline:none;
+        ">
+        <div style="display:flex;gap:8px;width:100%;">
+            <button id="face-modal-cancel" style="
+                flex:1;padding:11px;border:1px solid #e5e5ea;background:white;
+                border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;
+            ">Skip</button>
+            <button id="face-modal-save" style="
+                flex:1;padding:11px;border:none;background:#007aff;color:white;
+                border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;
+            ">Save face</button>
+        </div>
+    </div>
 </div>
 <div id="lightbox">
     <button class="lb-nav" id="lightbox-prev">‹</button>
