@@ -314,26 +314,63 @@ let markerClusters = null;
     if (window.currentView === 'memory') loadMemory();
 });
 
-    // ── FAVORITES ──
-    function getFavorites() {
-        try { return JSON.parse(localStorage.getItem('mem_favorites') || '[]'); }
-        catch { return []; }
+   // disk-backed favorites, localStorage as cache only
+    let _favSet = null;
+
+    async function loadFavoritesFromDisk() {
+        const resp = await fetch('/favorites');
+        const { photos } = await resp.json();
+        _favSet = new Set(photos.map(p => p.url.replace(/^\//, '')));
+        // check if localStorage has unsaved favorites
+        const stored = JSON.parse(localStorage.getItem('mem_favorites') || '[]');
+        const unsaved = stored.filter(u => !_favSet.has(u));
+        if (unsaved.length > 0) {
+            const save = confirm(`You have ${unsaved.length} favorite(s) saved only in browser storage. Save them to disk permanently?`);
+            if (save) {
+                for (const url of unsaved) {
+                    await fetch('/favorites/add', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({path: url})
+                    });
+                    _favSet.add(url);
+                }
+                localStorage.removeItem('mem_favorites');
+            }
+        }
+        renderFavStrip();
+        return _favSet;
     }
-    function toggleFavorite(url) {
-    // strip any leading base path so only relative path is stored
-    const BASE = 'media/georgerieh/T7/photos_from_icloud/';
-    let cleanUrl = url.replace(/^\//, '');  // strip leading slash
-    if (cleanUrl.startsWith(BASE)) cleanUrl = cleanUrl.slice(BASE.length);
-    
-    let favs = getFavorites();
-    if (favs.includes(cleanUrl)) favs = favs.filter(u => u !== cleanUrl);
-    else favs.push(cleanUrl);
-    localStorage.setItem('mem_favorites', JSON.stringify(favs));
-    renderFavStrip();
-    return favs.includes(cleanUrl);
-}
-    window.toggleFavorite = toggleFavorite;
-    window.getFavorites = getFavorites;
+
+    function getFavorites() {
+        return _favSet ? [..._favSet] : [];
+    }
+
+    async function toggleFavorite(url) {
+        const BASE = 'media/georgerieh/T7/photos_from_icloud/';
+        let cleanUrl = url.replace(/^\//, '');
+        if (cleanUrl.startsWith(BASE)) cleanUrl = cleanUrl.slice(BASE.length);
+
+        if (!_favSet) await loadFavoritesFromDisk();
+
+        if (_favSet.has(cleanUrl)) {
+            _favSet.delete(cleanUrl);
+            await fetch('/favorites/remove', {
+                method: 'DELETE',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({path: cleanUrl})
+            });
+        } else {
+            _favSet.add(cleanUrl);
+            await fetch('/favorites/add', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({path: cleanUrl})
+            });
+        }
+        renderFavStrip();
+        return _favSet.has(cleanUrl);
+    }
 
     // ── LIGHTBOX ──
     let lightboxImages = [], lightboxIndex = 0;
@@ -367,7 +404,7 @@ let markerClusters = null;
     full.src = `/files/${url}`;
         document.getElementById('lightbox-location').textContent = img.location || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
-        document.getElementById('lightbox-fav').classList.toggle('active', getFavorites().includes(cleanUrl));
+        document.getElementById('lightbox-fav').classList.toggle('active', _favSet ? _favSet.has(cleanUrl) : false);
         const preload = (i) => {
         const p = lightboxImages[i];
         if (!p) return;
@@ -441,11 +478,26 @@ let markerClusters = null;
     });},{ rootMargin: '200px', threshold: 0 });
     window.renderChunk = function(images) {
     const grid = document.getElementById('photo-grid');
-    const favs = getFavorites();
+    const favs = _favSet ? [..._favSet] : [];
     const offset = window.currentImages.length;
     window.currentImages.push(...images);
     document.getElementById('empty-state').style.display = 'none';
-
+    // show count + "view all" button
+        const header = document.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
+        header.innerHTML = `
+            <span style="font-size:11px;color:#8e8e93;">${favs.length} favorites</span>
+            <button id="fav-view-all" style="border:none;background:none;color:#007aff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">View all</button>
+        `;
+        strip.appendChild(header);
+        if (favs.length > 16) {
+            const more = document.createElement('div');
+            more.style.cssText = 'font-size:11px;color:#8e8e93;text-align:center;margin-top:4px;cursor:pointer;';
+            more.textContent = `+${favs.length - 16} more`;
+            more.addEventListener('click', openFavoritesOverlay);
+            strip.appendChild(more);
+        }
+        header.querySelector('#fav-view-all').addEventListener('click', openFavoritesOverlay);
     images.forEach((img, i) => {
         const url = img.url.replace(/^\//, '');
         const isFav = favs.includes(url);
@@ -611,14 +663,63 @@ let markerClusters = null;
     // init favorites strip
     
 
-    renderFavStrip();
+    loadFavoritesFromDisk();
 
     // init with server-rendered data if any
     {% if images %}
     const serverImages = {{ images | tojson }};
     if (serverImages.length > 0) window.renderResults({ images: serverImages });
     {% endif %}
+async function openFavoritesOverlay() {
+        const overlay = document.getElementById('favorites-overlay');
+        const grid = document.getElementById('fav-overlay-grid');
+        const countEl = document.getElementById('fav-overlay-count');
+        overlay.style.display = 'flex';
+        grid.innerHTML = '';
 
+        const resp = await fetch('/favorites');
+        const { photos } = await resp.json();
+        countEl.textContent = `${photos.length} photos`;
+
+        photos.forEach((photo, i) => {
+            const url = photo.url.replace(/^\//, '');
+            const cell = document.createElement('div');
+            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
+            cell.innerHTML = `
+                <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
+                <div class="grid-overlay" style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.35) 0%,transparent 45%);opacity:0;transition:opacity 0.18s;padding:7px;display:flex;justify-content:space-between;align-items:flex-start;">
+                    <button class="thumb-btn thumb-fav fav-active" title="Unfavorite">♥</button>
+                    <button class="thumb-btn thumb-delete" title="Delete from disk">✕</button>
+                </div>
+            `;
+            cell.querySelector('div').addEventListener('click', () => openLightbox(photos, i));
+            cell.addEventListener('mouseenter', () => cell.querySelector('.grid-overlay').style.opacity = '1');
+            cell.addEventListener('mouseleave', () => cell.querySelector('.grid-overlay').style.opacity = '0');
+
+            cell.querySelector('.thumb-fav').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await toggleFavorite(url);
+                cell.style.opacity = '0';
+                setTimeout(() => cell.remove(), 300);
+                countEl.textContent = `${grid.children.length - 1} photos`;
+            });
+            cell.querySelector('.thumb-delete').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm('Delete this photo from disk?')) return;
+                const fd = new FormData();
+                fd.append('image_paths', url);
+                await fetch('/delete_photo', {method:'POST', body: fd});
+                await toggleFavorite(url);
+                cell.style.opacity = '0';
+                setTimeout(() => cell.remove(), 300);
+            });
+            grid.appendChild(cell);
+        });
+    }
+
+    document.getElementById('fav-overlay-close').addEventListener('click', () => {
+        document.getElementById('favorites-overlay').style.display = 'none';
+    });
     </script>
 
     <style>
@@ -1364,6 +1465,17 @@ let markerClusters = null;
                     cursor:pointer;
                     transition:background 0.15s;
                 ">↻ New Memory</button>
+                <button id="memory-today-btn" style="
+                    padding:9px 18px;
+                    background:white;
+                    color:#007aff;
+                    border:1px solid rgba(0,122,255,0.3);
+                    border-radius:10px;
+                    font-size:13px;
+                    font-weight:600;
+                    font-family:inherit;
+                    cursor:pointer;
+                ">Today</button>
             </div>
         </div>
 
@@ -1485,6 +1597,39 @@ let markerClusters = null;
 </div>
  
 <script>
+
+document.getElementById('memory-today-btn').addEventListener('click', async () => {
+    document.getElementById('memory-loading').style.display = 'flex';
+    document.getElementById('memory-content').style.display = 'none';
+    
+    const resp = await fetch('/photo_of_day');
+    const data = await resp.json();
+    currentMemory = data;
+    
+    document.getElementById('memory-title').textContent = data.title;
+    document.getElementById('memory-subtitle').textContent = data.subtitle;
+    
+    if (data.photos.length > 0) {
+        const heroUrl = data.photos[0].url.replace(/^\//, '');
+        const hero = document.getElementById('memory-hero');
+        hero.style.backgroundImage = `url('/thumbnail/${heroUrl}?size=800')`;
+        hero.onclick = () => window.openLightbox && window.openLightbox(data.photos, 0);
+    }
+    
+    const grid = document.getElementById('memory-grid');
+    grid.innerHTML = '';
+    data.photos.slice(1).forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, '');
+        const cell = document.createElement('div');
+        cell.style.cssText = 'aspect-ratio:1;border-radius:4px;cursor:pointer;';
+        cell.style.background = `url('/thumbnail/${url}') center/cover`;
+        cell.addEventListener('click', () => window.openLightbox && window.openLightbox(data.photos, i + 1));
+        grid.appendChild(cell);
+    });
+    
+    document.getElementById('memory-loading').style.display = 'none';
+    document.getElementById('memory-content').style.display = 'block';
+});
     const gridSelected = new Set();
 fetch('/autocomplete')
     .then(r => r.json())
@@ -1595,6 +1740,30 @@ async function loadStats() {
         <div id="album-overlay-count" style="font-size:12px;color:#8e8e93;"></div>
     </div>
     <div id="album-overlay-grid" style="
+        flex:1;overflow-y:auto;padding:12px;
+        display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
+        gap:3px;
+        align-content:start;
+    "></div>
+</div>
+<div id="favorites-overlay" style="
+    display:none;position:fixed;inset:0;
+    background:rgba(242,242,247,0.97);
+    backdrop-filter:blur(20px);
+    z-index:500;flex-direction:column;overflow:hidden;
+">
+    <div style="
+        display:flex;align-items:center;gap:12px;
+        padding:12px 16px;
+        background:rgba(255,255,255,0.88);
+        border-bottom:1px solid rgba(0,0,0,0.08);
+    ">
+        <button id="fav-overlay-close" style="border:none;background:none;font-size:20px;cursor:pointer;color:#007aff;padding:4px 8px;">‹</button>
+        <div style="font-size:17px;font-weight:600;flex:1;">Favorites</div>
+        <div id="fav-overlay-count" style="font-size:12px;color:#8e8e93;"></div>
+    </div>
+    <div id="fav-overlay-grid" style="
         flex:1;overflow-y:auto;padding:12px;
         display:grid;
         grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
@@ -1833,32 +2002,83 @@ async function openSavedCollection(col) {
 
     const grid = document.getElementById('memory-grid');
     grid.innerHTML = '';
-        photos.slice(1).forEach((photo, i) => {
-            const url = photo.url.replace(/^\//, '');
-            const cell = document.createElement('div');
-            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
-            cell.innerHTML = `
-                <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
-                <button style="
-                    display:none;position:absolute;top:4px;right:4px;
-                    border:none;background:rgba(255,59,48,0.8);color:white;
-                    border-radius:50%;width:24px;height:24px;font-size:11px;cursor:pointer;z-index:10;
-                ">✕</button>
-            `;
-            cell.querySelector('div').addEventListener('click', () => {
-                if (window.openLightbox) window.openLightbox(photos, i + 1);
+        const selected = new Set();
+
+    function updateCollectionToolbar() {
+        const toolbar = document.getElementById('memory-select-toolbar');
+        if (toolbar) {
+            toolbar.style.display = selected.size > 0 ? 'flex' : 'none';
+            document.getElementById('memory-select-count').textContent = `${selected.size} selected`;
+        }
+    }
+
+    // reuse existing toolbar delete button but wire to collection remove
+    const existingToolbar = document.getElementById('memory-select-toolbar');
+    if (existingToolbar) existingToolbar.remove();
+
+    const toolbar = document.createElement('div');
+    toolbar.id = 'memory-select-toolbar';
+    toolbar.style.cssText = 'display:none;align-items:center;gap:10px;margin-bottom:10px;';
+    toolbar.innerHTML = `
+        <span id="memory-select-count" style="font-size:13px;color:#3c3c43;font-weight:500;"></span>
+        <button id="memory-deselect-all" style="border:none;background:#f2f2f7;color:#3c3c43;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Deselect all</button>
+        <button id="memory-delete-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✕ Remove selected</button>
+    `;
+    grid.before(toolbar);
+
+    document.getElementById('memory-deselect-all').addEventListener('click', () => {
+        selected.forEach(url => {
+            const cell = grid.querySelector(`[data-url="${url}"]`);
+            if (cell) cell.classList.remove('mem-selected');
+        });
+        selected.clear();
+        updateCollectionToolbar();
+    });
+
+    document.getElementById('memory-delete-selected').addEventListener('click', async () => {
+        if (!confirm(`Remove ${selected.size} photo(s) from this collection?`)) return;
+        for (const url of selected) {
+            const cell = grid.querySelector(`[data-url="${url}"]`);
+            if (cell) { cell.style.opacity = '0'; cell.style.transform = 'scale(0.85)'; cell.style.transition = 'all 0.2s'; }
+            await fetch(`/collections/${encodeURIComponent(col.name)}/remove`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({path: url})
             });
-            cell.querySelector('button').addEventListener('click', (e) => {
-                e.stopPropagation();
-                photos.splice(i + 1, 1);
-                cell.style.opacity = '0';
-                cell.style.transform = 'scale(0.85)';
-                cell.style.transition = 'all 0.2s';
-                setTimeout(() => cell.remove(), 200);
-            });
-            cell.addEventListener('mouseenter', () => cell.querySelector('button').style.display = 'block');
-            cell.addEventListener('mouseleave', () => cell.querySelector('button').style.display = 'none');
-            grid.appendChild(cell);
+        }
+        setTimeout(() => {
+            selected.forEach(url => grid.querySelector(`[data-url="${url}"]`)?.remove());
+            selected.clear();
+            updateCollectionToolbar();
+        }, 220);
+    });
+
+    photos.slice(1).forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, '');
+        const cell = document.createElement('div');
+        cell.dataset.url = url;
+        cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;cursor:pointer;transition:opacity 0.2s,transform 0.2s;';
+        cell.innerHTML = `
+            <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;"></div>
+            <div class="mem-check" style="display:none;position:absolute;top:5px;left:5px;width:20px;height:20px;border-radius:50%;background:#007aff;border:2px solid white;align-items:center;justify-content:center;color:white;font-size:11px;">✓</div>
+            <div style="position:absolute;inset:0;border:3px solid transparent;border-radius:4px;transition:border-color 0.15s;" class="mem-border"></div>
+        `;
+        cell.addEventListener('click', (e) => {
+            if (selected.size > 0 || e.shiftKey) {
+                if (selected.has(url)) { selected.delete(url); cell.classList.remove('mem-selected'); }
+                else { selected.add(url); cell.classList.add('mem-selected'); }
+                updateCollectionToolbar();
+            } else {
+                if (window.openLightbox) window.openLightbox(photos, i  1);
+            }
+        });
+        cell.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            selected.add(url);
+            cell.classList.add('mem-selected');
+            updateCollectionToolbar();
+        });
+        grid.appendChild(cell);
         });
     // swap save button to "back"
     const saveBtn = document.getElementById('memory-save-btn');
