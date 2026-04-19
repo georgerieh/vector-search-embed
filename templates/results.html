@@ -269,7 +269,16 @@ let markerClusters = null;
             loadingText.textContent = 'Recognizing face...';
             loadingBar.style.width = '80%';
             const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
-            const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
+            // scale bounding box back to original image dimensions
+            const scaleX = img.width / detectCanvas.width;
+            const scaleY = img.height / detectCanvas.height;
+            const scaledBox = {
+                originX: best.boundingBox.originX * scaleX,
+                originY: best.boundingBox.originY * scaleY,
+                width: best.boundingBox.width * scaleX,
+                height: best.boundingBox.height * scaleY,
+            };
+            const faceResults = await faceNetSession.run({ input: preprocessFace(img, scaledBox) });
             facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
 
             const cropCanvas = document.createElement('canvas');
