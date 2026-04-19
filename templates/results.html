@@ -1975,12 +1975,14 @@ function buildGallery(images, startIndex) {
         const url = img.url.replace(/^\//, '');
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
-        photo.style.backgroundImage = `url('/files/${url}')`;
+        photo.style.backgroundImage = `url('/thumbnail/${url}')`;
         main.insertBefore(photo, main.querySelector('.gallery-controls'));
 
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
-        thumb.style.backgroundImage = `url('/files/${url}')`;
+        thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
+        photo.style.cursor = 'pointer';
+        photo.addEventListener('click', () => window.openLightbox(images, i));
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
