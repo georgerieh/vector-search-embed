@@ -2715,6 +2715,21 @@ document.getElementById('clear-btn').addEventListener('click', () => {
     selectedFaceEmbedding = null;
     document.querySelectorAll('#face-selector img').forEach(i => i.style.borderColor = 'transparent');
 });
+document.getElementById('clear-btn').addEventListener('click', () => {
+    console.log('clear clicked');
+    document.getElementById('start-date').value = '';
+    document.getElementById('end-date').value = '';
+    document.getElementById('country-filter').value = '';
+    document.getElementById('city-filter').value = '';
+    document.getElementById('h3-filter').value = '';
+    document.getElementById('limit').value = '';
+    const fileInput = document.getElementById('image-in');
+    fileInput.value = '';
+    try { fileInput.value = null; } catch(e) {}
+    document.getElementById('file-label-text').textContent = 'Search by photo';
+    document.getElementById('ref-preview').style.display = 'none';
+    if (window._clearFaceSelection) window._clearFaceSelection();
+});
 document.getElementById('grid-delete-selected').addEventListener('click', async () => {
     if (!confirm(`Permanently delete ${gridSelected.size} photo(s)?`)) return;
     for (const url of gridSelected) {
