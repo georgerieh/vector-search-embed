@@ -251,7 +251,20 @@ let markerClusters = null;
         loadingBar.style.width = '60%';
 
         loadingText.textContent = 'Detecting faces...';
-        const detection = faceDetector.detect(img);
+       // resize for face detection — mediapipe struggles with large images
+        const detectCanvas = document.createElement('canvas');
+        const maxDim = 640;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        detectCanvas.width = img.width * scale;
+        detectCanvas.height = img.height * scale;
+        detectCanvas.getContext('2d').drawImage(img, 0, 0, detectCanvas.width, detectCanvas.height);
+        let detection;
+        try {
+            detection = faceDetector.detect(detectImg);
+        } catch (e) {
+            console.warn('Face detection failed:', e);
+            detection = { detections: [] };
+        }
         if (detection.detections.length > 0) {
             loadingText.textContent = 'Recognizing face...';
             loadingBar.style.width = '80%';
