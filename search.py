@@ -22,13 +22,23 @@ def _blob_to_vec(blob, dim):
         return np.frombuffer(blob, dtype=np.float32)
     return None
 
-def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=()):
+def _score_dino_rows(rows, dino_q, face_scores):
+    results = []
+    for row_id, path, location, lat, lon, dino_blob, media_type, video_path in rows:
+        dino_vec = _blob_to_vec(dino_blob, 768)
+        if dino_vec is None:
+            continue
+        dino_score = float(np.linalg.norm(dino_vec - dino_q))
+        face_score = face_scores.get(row_id, 0.0)
+        results.append((dino_score + face_score, path, location, lat, lon, media_type, video_path))
+    return results
+
+def _vector_search(conn, dino_query, facenet_query, where_clause="", where_photos="", where_params=()):
     dino_q = np.array(dino_query, dtype=np.float32)
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
     facenet_q = np.array(facenet_query, dtype=np.float32) if has_face_query else None
 
     if has_face_query:
-        # load all face embeddings for photos that pass the filter, grouped by photo_id
         face_sql = f"""
             SELECT f.photo_id, f.facenet_embedding
             FROM faces f
@@ -38,7 +48,6 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
         """
         face_rows = conn.execute(face_sql, where_params).fetchall()
 
-        # group faces by photo_id → min L2
         from collections import defaultdict
         photo_face_scores = defaultdict(lambda: float("inf"))
         for photo_id, blob in face_rows:
@@ -51,32 +60,30 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
         if not photo_face_scores:
             return []
 
-        # now fetch only photos that have faces
         photo_ids = list(photo_face_scores.keys())
     else:
         photo_ids = None
 
-    # chunked DINO scan
     if photo_ids is not None:
-        # only scan photos with faces — batch IN queries
         all_results = []
         for chunk_start in range(0, len(photo_ids), CHUNK_SIZE):
             chunk_ids = photo_ids[chunk_start:chunk_start + CHUNK_SIZE]
             placeholders = ",".join("?" * len(chunk_ids))
             sql = f"""
-                SELECT id, path, location, lat, lon, dino_embedding
+                SELECT id, path, location, lat, lon, dino_embedding,
+                       COALESCE(media_type, 'photo'), video_path
                 FROM photos
                 WHERE id IN ({placeholders})
             """
             rows = conn.execute(sql, chunk_ids).fetchall()
             all_results.extend(_score_dino_rows(rows, dino_q, photo_face_scores))
     else:
-        # full table scan in chunks
         all_results = []
         sql = f"""
-            SELECT id, path, location, lat, lon, dino_embedding
+            SELECT id, path, location, lat, lon, dino_embedding,
+                   COALESCE(media_type, 'photo'), video_path
             FROM photos
-            {where_clause}
+            {where_photos}
             ORDER BY id
         """
         cursor = conn.execute(sql, where_params)
@@ -91,7 +98,7 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
 
     seen = set()
     output = []
-    for score, path, location, lat, lon in all_results:
+    for score, path, location, lat, lon, media_type, video_path in all_results:
         if path in seen:
             continue
         seen.add(path)
@@ -99,26 +106,22 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
             timestamp = int(os.path.getmtime(path))
         except OSError:
             timestamp = 0
+
+        # for video, url points to the matched frame thumbnail
+        # video_url points to the actual video file
+        url = unquote(path).replace(f"{MOUNT_PATH}/", "")
         output.append({
             "location": location,
-            "url": unquote(path).replace(f"{MOUNT_PATH}/", ""),
+            "url": url,
+            "video_url": unquote(video_path).replace(f"{MOUNT_PATH}/", "") if media_type == 'video' and video_path else None,
             "score": round(float(score), 3),
             "lat": lat,
             "lon": lon,
             "timestamp": timestamp,
+            "media_type": media_type,
         })
     return output
 
-def _score_dino_rows(rows, dino_q, face_scores):
-    results = []
-    for row_id, path, location, lat, lon, dino_blob in rows:
-        dino_vec = _blob_to_vec(dino_blob, 768)
-        if dino_vec is None:
-            continue
-        dino_score = float(np.linalg.norm(dino_vec - dino_q))
-        face_score = face_scores.get(row_id, 0.0)  # 0.0 when no face query
-        results.append((dino_score + face_score, path, location, lat, lon))
-    return results
 
 def search_with_images(image, limit, embedding, start_date="", end_date="", 
                        facenet_embedding=None, country="", city="", h3cell=""):
@@ -170,15 +173,25 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
             ORDER BY date DESC LIMIT ?
         """
         rows = conn.execute(sql, where_params + (limit,)).fetchall()
+        seen = set()
         results = []
-        for path, location, lat, lon in rows:
+        for path, location, lat, lon, media_type, video_path in rows:
+            if path in seen:
+                continue
+            seen.add(path)
+            try:
+                ts = int(os.path.getmtime(path))
+            except OSError:
+                ts = 0
             results.append({
                 "location": location,
                 "url": unquote(path).replace(f"{MOUNT_PATH}/", ""),
+                "video_url": unquote(video_path).replace(f"{MOUNT_PATH}/", "") if media_type == 'video' and video_path else None,
                 "score": 0.0,
                 "lat": lat,
                 "lon": lon,
-                "timestamp": 0,
+                "timestamp": ts,
+                "media_type": media_type,
             })
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}

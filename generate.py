@@ -14,8 +14,8 @@ from tqdm import tqdm
 # -----------------------
 # CPU-only device
 # -----------------------
-device = torch.device("cpu")
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
+print('using', device)
 # -----------------------
 # Models
 # -----------------------
