@@ -389,12 +389,31 @@ let markerClusters = null;
     const BASE_PATH = 'media/georgerieh/T7/photos_from_icloud/';
     const BASE = BASE_PATH
     function cleanPhotoUrl(url) {
-            let clean = url.replace(/^\//, '');
-            if (clean.startsWith(BASE_PATH)) {
-                clean = clean.slice(BASE_PATH.length);
+    if (!url) return '';
+    
+    let clean = decodeURIComponent(url).replace(/^\//, '');
+    
+    const prefixesToRemove = [
+        'files/',
+        'thumbnail/',
+        'static/',
+        'media/georgerieh/T7/photos_from_icloud/',
+        'media/georgerieh/T7/'
+    ];
+    
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const prefix of prefixesToRemove) {
+            if (clean.startsWith(prefix)) {
+                clean = clean.slice(prefix.length).replace(/^\//, '');
+                changed = true;
             }
-            return clean;
         }
+    }
+    
+    return clean;
+}
     function updateLightbox() {
         const img = lightboxImages[lightboxIndex];
         const url = img.url.replace(/^\//, '');
@@ -662,52 +681,149 @@ let markerClusters = null;
     const serverImages = {{ images | tojson }};
     if (serverImages.length > 0) window.renderResults({ images: serverImages });
     {% endif %}
+window.favOverlaySelected = new Set();
+
 async function openFavoritesOverlay() {
-        const overlay = document.getElementById('favorites-overlay');
-        const grid = document.getElementById('fav-overlay-grid');
-        const countEl = document.getElementById('fav-overlay-count');
-        overlay.style.display = 'flex';
-        grid.innerHTML = '';
+    const overlay = document.getElementById('favorites-overlay');
+    const grid = document.getElementById('fav-overlay-grid');
+    const countEl = document.getElementById('fav-overlay-count');
+    const batchBtn = document.getElementById('fav-batch-delete-btn');
+    
+    overlay.style.display = 'flex';
+    grid.innerHTML = '';
+    window.favOverlaySelected.clear();
+    if (batchBtn) batchBtn.style.display = 'none';
 
-        const resp = await fetch('/favorites');
-        const { photos } = await resp.json();
-        countEl.textContent = `${photos.length} photos`;
+    const resp = await fetch('/favorites');
+    const { photos } = await resp.json();
+    countEl.textContent = `${photos.length} photos`;
 
-        photos.forEach((photo, i) => {
-            const url = photo.url.replace(/^\//, '');
-            const cell = document.createElement('div');
-            cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;';
-            cell.innerHTML = `
-                <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
-                <div class="grid-overlay" style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.35) 0%,transparent 45%);opacity:0;transition:opacity 0.18s;padding:7px;display:flex;justify-content:space-between;align-items:flex-start;">
-                    <button class="thumb-btn thumb-fav fav-active" title="Unfavorite">♥</button>
-                    <button class="thumb-btn thumb-delete" title="Delete from disk">✕</button>
-                </div>
-            `;
-            cell.querySelector('div').addEventListener('click', () => openLightbox(photos, i));
-            cell.addEventListener('mouseenter', () => cell.querySelector('.grid-overlay').style.opacity = '1');
-            cell.addEventListener('mouseleave', () => cell.querySelector('.grid-overlay').style.opacity = '0');
+    photos.forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, '');
+        const cell = document.createElement('div');
+        cell.className = 'fav-overlay-cell';
+        cell.dataset.url = url;
+        cell.style.cssText = 'aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;transition:transform 0.2s, box-shadow 0.2s;';
+        
+        cell.innerHTML = `
+            <div class="fav-img-bg" style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
+            <div class="grid-overlay" style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.4) 0%,transparent 45%);opacity:0;transition:opacity 0.18s;padding:7px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;">
+                <button class="thumb-btn thumb-fav fav-active" style="pointer-events:auto;" title="Unfavorite">♥</button>
+                <button class="thumb-btn thumb-delete" style="pointer-events:auto;" title="Delete from disk">✕</button>
+            </div>
+            <div class="select-check" style="position:absolute;bottom:8px;right:8px;width:20px;height:20px;border-radius:50%;background:#007aff;color:white;display:none;align-items:center;justify-content:center;font-size:12px;font-weight:bold;box-shadow:0 2px 4px rgba(0,0,0,0.2);">✓</div>
+        `;
 
-            cell.querySelector('.thumb-fav').addEventListener('click', async (e) => {
-                e.stopPropagation();
-                await toggleFavorite(url);
-                cell.style.opacity = '0';
-                setTimeout(() => cell.remove(), 300);
-                countEl.textContent = `${grid.children.length - 1} photos`;
-            });
-            cell.querySelector('.thumb-delete').addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (!confirm('Delete this photo from disk?')) return;
-                const fd = new FormData();
-                fd.append('image_paths', url);
-                await fetch('/delete_photo', {method:'POST', body: fd});
-                await toggleFavorite(url);
-                cell.style.opacity = '0';
-                setTimeout(() => cell.remove(), 300);
-            });
-            grid.appendChild(cell);
+        // Selection / Lightbox logic
+        cell.querySelector('.fav-img-bg').addEventListener('click', (e) => {
+            if (e.shiftKey || window.favOverlaySelected.size > 0) {
+                // Toggle multi-select status
+                if (window.favOverlaySelected.has(url)) {
+                    window.favOverlaySelected.delete(url);
+                    cell.style.transform = '';
+                    cell.style.boxShadow = '';
+                    cell.querySelector('.select-check').style.display = 'none';
+                } else {
+                    window.favOverlaySelected.add(url);
+                    cell.style.transform = 'scale(0.92)';
+                    cell.style.boxShadow = '0 0 0 3px #007aff';
+                    cell.querySelector('.select-check').style.display = 'flex';
+                }
+                
+                // Show/Hide batch delete button
+                if (batchBtn) {
+                    batchBtn.style.display = window.favOverlaySelected.size > 0 ? 'inline-block' : 'none';
+                    batchBtn.textContent = `✕ Delete Selected (${window.favOverlaySelected.size}) From Disk`;
+                }
+            } else {
+                // Regular single click goes to Lightbox
+                openLightbox(photos, i);
+            }
         });
+
+        // Hover overlays
+        cell.addEventListener('mouseenter', () => cell.querySelector('.grid-overlay').style.opacity = '1');
+        cell.addEventListener('mouseleave', () => cell.querySelector('.grid-overlay').style.opacity = '0');
+
+        // Individual quick buttons inside the overlay
+        cell.querySelector('.thumb-fav').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await toggleFavorite(url);
+            cell.style.opacity = '0';
+            setTimeout(() => { cell.remove(); countEl.textContent = `${grid.children.length} photos`; }, 300);
+        });
+
+        cell.querySelector('.thumb-delete').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm('Delete this photo from disk permanently?')) return;
+            const fd = new FormData();
+            fd.append('image_paths', url);
+            await fetch('/delete_photo', {method:'POST', body: fd});
+            await toggleFavorite(url);
+            cell.style.opacity = '0';
+            setTimeout(() => { cell.remove(); countEl.textContent = `${grid.children.length} photos`; }, 300);
+        });
+
+        grid.appendChild(cell);
+    });
+}
+window.openFavoritesOverlay = openFavoritesOverlay;
+async function deleteSelectedFavs() {
+    if (window.favOverlaySelected.size === 0) return;
+    
+    const count = window.favOverlaySelected.size;
+    if (!confirm(`Are you sure you want to permanently delete these ${count} selected photos from your T7 disk drive?`)) return;
+    
+    const grid = document.getElementById('fav-overlay-grid');
+    const countEl = document.getElementById('fav-overlay-count');
+    const batchBtn = document.getElementById('fav-batch-delete-btn');
+    
+    document.getElementById('loading-container').style.display = 'block';
+    
+    for (const url of [...window.favOverlaySelected]) {
+        try {
+            // 1. Purge physical asset from disk database
+            const fd = new FormData();
+            fd.append('image_paths', url);
+            await fetch('/delete_photo', { method: 'POST', body: fd });
+            
+            // 2. Clear out of virtual tracking registry file
+            if (_favSet) _favSet.delete(url);
+            await fetch('/favorites/remove', {
+                method: 'DELETE',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({path: url})
+            });
+
+            // 3. Drop from the visual overlay DOM tree
+            const cell = grid.querySelector(`[data-url="${CSS.escape(url)}"]`);
+            if (cell) {
+                cell.style.opacity = '0';
+                cell.style.transform = 'scale(0.8)';
+                setTimeout(() => cell.remove(), 250);
+            }
+
+            // Also clean out standard view grid tracking arrays if open behind the overlay
+            window.currentImages = window.currentImages.filter(img => img.url.replace(/^\//, '') !== url);
+            const mainGridCell = document.querySelector(`#photo-grid [data-url="${CSS.escape(url)}"]`);
+            if (mainGridCell) mainGridCell.remove();
+
+        } catch (err) {
+            console.error("Batch deletion processing failure for item:", url, err);
+        }
     }
+    
+    // Reset selections states cleanly
+    window.favOverlaySelected.clear();
+    if (batchBtn) batchBtn.style.display = 'none';
+    
+    setTimeout(() => {
+        countEl.textContent = `${grid.children.length} photos`;
+        renderFavStrip();
+        document.getElementById('loading-container').style.display = 'none';
+    }, 300);
+}
+window.deleteSelectedFavs = deleteSelectedFavs;
 
     document.getElementById('fav-overlay-close').addEventListener('click', () => {
         document.getElementById('favorites-overlay').style.display = 'none';
@@ -1414,6 +1530,7 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
              <button type="button" id="clear-btn" class="search-btn" style="background:#f2f2f7;color:#3c3c43;">Clear</button>
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
+           
         </form>
         <div id="ref-preview" style="display:none; margin-top:4px;">
         <img id="ref-img" style="
@@ -1430,6 +1547,9 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
     <div class="sidebar-stats">
         <span id="result-count">No results yet</span>
         <span>{{ gen_time }}s · {{ query_time }}s</span>
+         <button onclick="window.deleteSelectedPhotos()" class="toolbar-danger-btn">
+                ✕ Delete Selected
+            </button>
     </div>
 
     <div class="sidebar-section">
@@ -1861,6 +1981,9 @@ async function loadStats() {
         border-bottom:1px solid rgba(0,0,0,0.08);
     ">
         <button id="fav-overlay-close" style="border:none;background:none;font-size:20px;cursor:pointer;color:#007aff;padding:4px 8px;">‹</button>
+        <button id="fav-batch-delete-btn" onclick="window.deleteSelectedFavs()" style="display:none; color:#ff3b30; margin-left:15px; background:none; border:none; font-weight:600; cursor:pointer;">
+            ✕ Delete Selected From Disk
+        </button>
         <div style="font-size:17px;font-weight:600;flex:1;">Favorites</div>
         <div id="fav-overlay-count" style="font-size:12px;color:#8e8e93;"></div>
     </div>
@@ -2750,6 +2873,54 @@ document.getElementById('clear-btn').addEventListener('click', () => {
     document.getElementById('ref-preview').style.display = 'none';
     if (window._clearFaceSelection) window._clearFaceSelection();
 });
+async function deleteSelectedPhotos() {
+    if (gridSelected.size === 0) return;
+    
+    const count = gridSelected.size;
+    if (!confirm(`Are you sure you want to permanently delete these ${count} photos from your disk?`)) return;
+    
+    document.getElementById('loading-container').style.display = 'block';
+    if (window.loadingText) window.loadingText.textContent = `Deleting ${count} photos...`;
+
+    for (const url of [...gridSelected]) {
+        try {
+            const fd = new FormData();
+            fd.append('image_paths', url);
+            
+            await fetch('/delete_photo', { 
+                method: 'POST', 
+                body: fd 
+            });
+
+            if (_favSet && _favSet.has(url)) {
+                _favSet.delete(url);
+            }
+
+            const cell = document.querySelector(`[data-url="${CSS.escape(url)}"]`);
+            if (cell) {
+                cell.style.opacity = '0';
+                cell.style.transform = 'scale(0.85)';
+                setTimeout(() => cell.remove(), 300);
+            }
+            
+            window.currentImages = window.currentImages.filter(img => img.url.replace(/^\//, '') !== url);
+            gridSelected.delete(url);
+
+        } catch (err) {
+            console.error(`Failed to delete photo: ${url}`, err);
+        }
+    }
+
+    // Refresh UI trackers
+    if (typeof renderFavStrip === 'function') renderFavStrip();
+    if (typeof updateGridToolbar === 'function') updateGridToolbar();
+    
+    document.getElementById('result-count').textContent = `${window.currentImages.length} photos`;
+    document.getElementById('loading-container').style.display = 'none';
+}
+
+// Expose it to your global HTML window context
+window.deleteSelectedPhotos = deleteSelectedPhotos;
 document.getElementById('grid-delete-selected').addEventListener('click', async () => {
     if (!confirm(`Permanently delete ${gridSelected.size} photo(s)?`)) return;
     for (const url of gridSelected) {
