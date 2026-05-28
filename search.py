@@ -161,7 +161,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
     if not dino_query:
         # filter-only, no vector search
         sql = f"""
-            SELECT path, location, lat, lon 
+            SELECT path, location, lat, lon, media_type, video_path 
             FROM photos {where} 
             ORDER BY date DESC LIMIT ?
         """
