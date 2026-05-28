@@ -249,7 +249,6 @@ let markerClusters = null;
         loadingBar.style.width = '60%';
         if (document.getElementById('detect-faces').checked) {
         loadingText.textContent = 'Detecting faces...';
-       // resize for face detection — mediapipe struggles with large images
         let detection;
         try {
             detection = faceDetector.detect(img);
@@ -261,7 +260,6 @@ let markerClusters = null;
             loadingText.textContent = 'Recognizing face...';
             loadingBar.style.width = '80%';
             const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
-            // scale bounding box back to original image dimensions
             const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
 
             facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
@@ -319,16 +317,15 @@ let markerClusters = null;
     setView('grid');
 });
 
-   // disk-backed favorites, localStorage as cache only
     let _favSet = null;
 
     async function loadFavoritesFromDisk() {
         const resp = await fetch('/favorites');
         const { photos } = await resp.json();
-        _favSet = new Set(photos.map(p => p.url.replace(/^\//, '')));
-        // check if localStorage has unsaved favorites
+        _favSet = new Set(photos.map(p => cleanPhotoUrl(p.url)));
         const stored = JSON.parse(localStorage.getItem('mem_favorites') || '[]');
-        const unsaved = stored.filter(u => !_favSet.has(u));
+        const unsaved = stored.map(u => cleanPhotoUrl(u)).filter(u => !_favSet.has(u));
+        
         if (unsaved.length > 0) {
             const save = confirm(`You have ${unsaved.length} favorite(s) saved only in browser storage. Save them to disk permanently?`);
             if (save) {
@@ -352,9 +349,7 @@ let markerClusters = null;
     }
 
     async function toggleFavorite(url) {
-        const BASE = 'media/georgerieh/T7/photos_from_icloud/';
-        let cleanUrl = url.replace(/^\//, '');
-        if (cleanUrl.startsWith(BASE)) cleanUrl = cleanUrl.slice(BASE.length);
+        const cleanUrl = cleanPhotoUrl(url);
 
         if (!_favSet) await loadFavoritesFromDisk();
 
@@ -391,23 +386,31 @@ let markerClusters = null;
         document.getElementById('lightbox').classList.remove('open');
         document.body.style.overflow = '';
     }
+    const BASE_PATH = 'media/georgerieh/T7/photos_from_icloud/';
+    const BASE = BASE_PATH
+    function cleanPhotoUrl(url) {
+            let clean = url.replace(/^\//, '');
+            if (clean.startsWith(BASE_PATH)) {
+                clean = clean.slice(BASE_PATH.length);
+            }
+            return clean;
+        }
     function updateLightbox() {
         const img = lightboxImages[lightboxIndex];
         const url = img.url.replace(/^\//, '');
         const BASE = 'media/georgerieh/T7/photos_from_icloud/';
+        
         const cleanUrl = url.startsWith(BASE) ? url.slice(BASE.length) : url;
         const lightboxImg = document.getElementById('lightbox-img');
-    // show thumbnail immediately
     lightboxImg.src = `/thumbnail/${url}?size=800`;
     lightboxImg.style.filter = 'blur(2px)';
-    // load full res in background, swap when ready
     const full = new Image();
     full.onload = () => {
         lightboxImg.src = full.src;
         lightboxImg.style.filter = '';
     };
     full.src = `/files/${url}`;
-        document.getElementById('lightbox-location').textContent = img.location || '';
+        document.getElementById('lightbox-location').textContent = 'Date: ' + img.date + 'at ' + img.city + ', ' + img.country  || '';
         document.getElementById('lightbox-counter').textContent = `${lightboxIndex + 1} / ${lightboxImages.length}`;
         document.getElementById('lightbox-fav').classList.toggle('active', _favSet ? _favSet.has(cleanUrl) : false);
         const preload = (i) => {
@@ -2050,72 +2053,85 @@ async function renderSavedCollections() {
     const list = document.getElementById('saved-collections-list');
     if (!list) return;
     list.innerHTML = '';
-    if (currentMemory && currentMemory.photos && currentMemory.photos.length > 0) {
-    const el = document.createElement('div');
-    el.style.cssText = 'background:#f0f7ff;border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:background 0.15s;';
-    el.innerHTML = `
-        <div style="display:flex;gap:3px;flex-shrink:0;">
-            ${currentMemory.photos.slice(0,3).map(p => {
-                const url = p.url.replace(/^\//, '');
-                return `<div style="width:44px;height:44px;border-radius:8px;background:url('/thumbnail/${url}') center/cover;"></div>`;
-            }).join('')}
-        </div>
-        <div style="flex:1;min-width:0;">
-            <div style="font-size:11px;font-weight:600;color:#007aff;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Current</div>
-            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${currentMemory.title}</div>
-            <div style="font-size:11px;color:#8e8e93;">${currentMemory.photos.length} photos</div>
-        </div>
-        <button id="current-memory-save" style="border:none;background:#007aff;color:white;border-radius:8px;font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;flex-shrink:0;">Save</button>
-    `;
-    el.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
-        // scroll back to memory content
-        document.getElementById('memory-content').scrollIntoView({ behavior: 'smooth' });
-    });
-    el.querySelector('button').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await saveCollection(currentMemory);
-        e.target.textContent = '✓';
-        e.target.style.background = '#34c759';
-    });
-    list.appendChild(el);
-}
 
-if (!collections.length) return;
-    collections.forEach(col => {
+    // ========================================================
+    // 1. RENDER THE ACTIVE "CURRENT MEMORY" SUB-MODULE BOX
+    // ========================================================
+    if (currentMemory && currentMemory.photos && currentMemory.photos.length > 0) {
         const el = document.createElement('div');
-        el.style.cssText = 'background:white;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:background 0.15s;';
+        el.style.cssText = 'background:#f0f7ff;border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:background 0.15s;margin-bottom:12px;';
         el.innerHTML = `
             <div style="display:flex;gap:3px;flex-shrink:0;">
-                ${col.preview.map(url => `<div style="width:44px;height:44px;border-radius:8px;background:url('/thumbnail/${url}') center/cover;"></div>`).join('')}
+                ${currentMemory.photos.slice(0, 3).map(p => {
+                    const url = p.url.replace(/^\//, '');
+                    return `<div style="width:44px;height:44px;border-radius:8px;background:url('/thumbnail/${url}') center/cover;"></div>`;
+                }).join('')}
             </div>
             <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${col.name}</div>
-                <div style="font-size:11px;color:#8e8e93;">${col.count} photos</div>
+                <div style="font-size:11px;font-weight:600;color:#007aff;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">Current</div>
+                <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${currentMemory.title}</div>
+                <div style="font-size:11px;color:#8e8e93;">${currentMemory.photos.length} photos</div>
             </div>
-            <button data-name="${col.name}" style="border:none;background:none;color:#ff3b30;font-size:16px;cursor:pointer;padding:4px 8px;flex-shrink:0;">✕</button>
+            <button id="current-memory-save" style="border:none;background:#007aff;color:white;border-radius:8px;font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;flex-shrink:0;">Save</button>
         `;
-
-        // open on click (but not delete button)
+        
         el.addEventListener('click', (e) => {
             if (e.target.closest('button')) return;
-            openSavedCollection(col);
+            // Force interface state restoration back to the active random generated item view
+            document.getElementById('memory-loading').style.display = 'none';
+            document.getElementById('memory-content').style.display = 'block';
+            document.getElementById('memory-content').scrollIntoView({ behavior: 'smooth' });
         });
-        el.addEventListener('mouseenter', () => el.style.background = '#f2f2f7');
-        el.addEventListener('mouseleave', () => el.style.background = 'white');
-
+        
         el.querySelector('button').addEventListener('click', async (e) => {
             e.stopPropagation();
-            const name = e.target.dataset.name;
-            if (!confirm(`Delete collection "${name}"?`)) return;
-            await fetch(`/collections/${encodeURIComponent(name)}`, {method: 'DELETE'});
-            renderSavedCollections();
+            await saveCollection(currentMemory);
+            e.target.textContent = '✓';
+            e.target.style.background = '#34c759';
         });
         list.appendChild(el);
-    });
+    }
+
+    // ========================================================
+    // 2. RENDER THE LIST OF HISTORICAL SAVED COLLECTIONS
+    // ========================================================
+    if (collections && collections.length > 0) {
+        collections.forEach(col => {
+            const el = document.createElement('div');
+            el.style.cssText = 'background:white;border:1px solid rgba(0,0,0,0.06);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.02);cursor:pointer;transition:background 0.15s;margin-bottom:8px;';
+            
+            const photoUrlsList = col.urls || [];
+            const previewThumbnails = photoUrlsList.slice(0, 3).map(urlStr => {
+                const cleanUrl = urlStr.replace(/^\//, '');
+                return `<div style="width:44px;height:44px;border-radius:8px;background:url('/thumbnail/${cleanUrl}') center/cover;"></div>`;
+            }).join('');
+
+            el.innerHTML = `
+                <div style="display:flex;gap:3px;flex-shrink:0;">
+                    ${previewThumbnails || '<div style="width:44px;height:44px;border-radius:8px;background:#e5e5ea;"></div>'}
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${col.name}</div>
+                    <div style="font-size:11px;color:#8e8e93;">${photoUrlsList.length || col.count || 0} photos</div>
+                </div>
+            `;
+
+            el.addEventListener('click', () => {
+                const collectionPayload = {
+                    name: col.name,
+                    count: photoUrlsList.length || col.count || 0
+                };
+                
+                openSavedCollection(collectionPayload);
+                
+                document.getElementById('memory-content').scrollIntoView({ behavior: 'smooth' });
+            });
+
+            list.appendChild(el);
+        });
+    }
 }
 async function openSavedCollection(col) {
-    // reuse memory-content UI but populate from saved data
     document.getElementById('memory-title').textContent = col.name;
     document.getElementById('memory-subtitle').textContent = col.count + ' photos';
 
@@ -2144,7 +2160,6 @@ async function openSavedCollection(col) {
         }
     }
 
-    // reuse existing toolbar delete button but wire to collection remove
     const existingToolbar = document.getElementById('memory-select-toolbar');
     if (existingToolbar) existingToolbar.remove();
 
