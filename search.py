@@ -4,7 +4,7 @@ import sqlite3
 import numpy as np
 from urllib.parse import unquote
 from PIL import Image as PILImage
-
+import sqlite_vec
 DB_PATH = "/media/georgerieh/T7/photos.db"
 CHUNK_SIZE = 10_000
 MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
@@ -13,6 +13,9 @@ _DIR = os.path.dirname(os.path.abspath(__file__))
 
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
     conn.execute("PRAGMA query_only=ON")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
@@ -34,81 +37,67 @@ def _score_dino_rows(rows, dino_q, face_scores):
     return results
 
 def _vector_search(conn, dino_query, facenet_query, where_clause="", where_photos="", where_params=()):
-    dino_q = np.array(dino_query, dtype=np.float32)
+    dino_q = np.array(dino_query, dtype=np.float32).tolist()
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
-    facenet_q = np.array(facenet_query, dtype=np.float32) if has_face_query else None
 
     if has_face_query:
-        face_sql = f"""
-            SELECT f.photo_id, f.facenet_embedding
-            FROM faces f
-            JOIN photos p ON p.id = f.photo_id
-            {where_clause}
-            ORDER BY f.photo_id
-        """
-        face_rows = conn.execute(face_sql, where_params).fetchall()
-
-        from collections import defaultdict
-        photo_face_scores = defaultdict(lambda: float("inf"))
-        for photo_id, blob in face_rows:
-            vec = _blob_to_vec(blob, 512)
-            if vec is not None:
-                score = float(np.linalg.norm(vec - facenet_q))
-                if score < photo_face_scores[photo_id]:
-                    photo_face_scores[photo_id] = score
-
-        if not photo_face_scores:
-            return []
-
-        photo_ids = list(photo_face_scores.keys())
-    else:
-        photo_ids = None
-
-    if photo_ids is not None:
-        all_results = []
-        for chunk_start in range(0, len(photo_ids), CHUNK_SIZE):
-            chunk_ids = photo_ids[chunk_start:chunk_start + CHUNK_SIZE]
-            placeholders = ",".join("?" * len(chunk_ids))
-            sql = f"""
-                SELECT id, path, location, lat, lon, dino_embedding,
-                       COALESCE(media_type, 'photo'), video_path
-                FROM photos
-                WHERE id IN ({placeholders})
-            """
-            rows = conn.execute(sql, chunk_ids).fetchall()
-            all_results.extend(_score_dino_rows(rows, dino_q, photo_face_scores))
-    else:
-        all_results = []
+        facenet_q = np.array(facenet_query, dtype=np.float32).tolist()
+        
+        prefix_where = f"{where_photos} AND" if where_photos else "WHERE"
+        
         sql = f"""
-            SELECT id, path, location, lat, lon, dino_embedding,
-                   COALESCE(media_type, 'photo'), video_path
-            FROM photos
-            {where_photos}
-            ORDER BY id
+            SELECT p.id, p.path, p.location, p.lat, p.lon, 
+                   (vd.distance + vf.distance) as total_score,
+                   COALESCE(p.media_type, 'photo'), p.video_path
+            FROM photos p
+            JOIN vec_photos vd ON p.id = vd.id
+            JOIN faces f ON p.id = f.photo_id
+            JOIN vec_faces vf ON f.id = vf.id
+            {prefix_where}
+                vd.dino_embedding MATCH ? AND vec_distance_l2(vd.dino_embedding, ?)
+                AND vf.facenet_embedding MATCH ? AND vec_distance_l2(vf.facenet_embedding, ?)
+            GROUP BY p.id  
+            ORDER BY 
+                p.date DESC, 
+                total_score ASC
+            LIMIT 500
         """
-        cursor = conn.execute(sql, where_params)
-        while True:
-            rows = cursor.fetchmany(CHUNK_SIZE)
-            if not rows:
-                break
-            all_results.extend(_score_dino_rows(rows, dino_q, {}))
+        params = where_params + (dino_q, dino_q, facenet_q, facenet_q)
+        cursor = conn.execute(sql, params)
 
-    all_results.sort(key=lambda x: x[0])
-    all_results = all_results[:50]
+    else:
+        prefix_where = f"{where_photos} AND" if where_photos else "WHERE"
+        
+        sql = f"""
+            SELECT p.id, p.path, p.location, p.lat, p.lon, v.distance as total_score,
+                   COALESCE(p.media_type, 'photo'), p.video_path
+            FROM photos p
+            JOIN vec_photos v ON p.id = v.id
+            {prefix_where} 
+                v.dino_embedding MATCH ? AND vec_distance_l2(v.dino_embedding, ?)
+            ORDER BY 
+                p.date DESC, 
+                v.distance ASC
+            LIMIT 500
+        """
+        params = where_params + (dino_q, dino_q)
+        cursor = conn.execute(sql, params)
 
+    rows = cursor.fetchall()
+    
     seen = set()
     output = []
-    for score, path, location, lat, lon, media_type, video_path in all_results:
+    
+    for row_id, path, location, lat, lon, score, media_type, video_path in rows:
         if path in seen:
             continue
         seen.add(path)
+        
         try:
             timestamp = int(os.path.getmtime(path))
         except OSError:
             timestamp = 0
 
-        # for video, url points to the matched frame thumbnail
-        # video_url points to the actual video file
         url = unquote(path).replace(f"{MOUNT_PATH}/", "")
         output.append({
             "location": location,
@@ -120,6 +109,10 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_photo
             "timestamp": timestamp,
             "media_type": media_type,
         })
+        
+        if len(output) >= 500:
+            break
+            
     return output
 
 

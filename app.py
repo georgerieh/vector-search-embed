@@ -112,7 +112,6 @@ def home():
 
     # --- Handle POST requests ---
     if request.method == "POST":
-        # Update session with current search/filter inputs
         session["search_text"] = request.form.get("search_text", session["search_text"])
         session["start_date"] = request.form.get("start_date", "")
         session["end_date"] = request.form.get("end_date", "")
