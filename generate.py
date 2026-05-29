@@ -102,58 +102,12 @@ print('using', device)
 model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
 model = model.to(device)
 model.eval()
-DB_PATH = "/Users/iamgeorgerieh/Documents/photos.db" 
 #cp /Volumes/T7/photos.db ~/Documents/photos.db
 
 BASE_DIR = "/Volumes/T7/photos_from_icloud"
 
-# conn = sqlite3.connect(DB_PATH)
 
-
-# rows = conn.execute(
-#     "SELECT path FROM photos WHERE path IS NOT NULL AND embedding_v2 IS NULL"
-# ).fetchall()
-
-# print(f"{len(rows)} photos to embed")
-
-
-# batch_size = 64
-
-# for i in tqdm(range(0, len(rows), batch_size)):
-#     batch = rows[i:i+batch_size]
-#     images, paths = [], []
-    
-#     for (path,) in batch:
-#         try:
-#             mac_path = path.replace('/media/georgerieh/T7', '/Volumes/T7')
-#             img = Image.open(mac_path).convert("RGB")
-#             images.append(img)
-#             paths.append(path)
-#         except Exception as e:
-#             continue
-    
-#     if not images:
-#         continue
-    
-#     tensors = torch.stack([transform(img) for img in images]).to(device)
-#     with torch.no_grad():
-#         embeddings = model(tensors)  # returns (B, 768) CLS token
-#         embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
-        
-#         embeddings = embeddings.cpu().numpy()
-    
-#     for path, emb in zip(paths, embeddings):
-#         conn.execute(
-#             "UPDATE photos SET embedding_v2 = ? WHERE path = ?",
-#             (json.dumps(emb.tolist()), path)
-#         )
-    
-#     conn.commit()
-
-# conn.close()
-# print("Done")
-
-
+DB_PATH = "/Users/iamgeorgerieh/Documents/photos.db" 
 BASE_PATH = "/Volumes/T7/photos_from_icloud"
 MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
 THUMBS_DIR = "/Volumes/T7/photos_from_icloud-out/thumbs"
@@ -191,16 +145,13 @@ def extract_frame(video_path, timestamp_sec, out_path):
     ], capture_output=True)
     return result.returncode == 0 and os.path.exists(out_path)
 
-# def load_dino():
-    # device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
-    # print(f"using {device}", flush=True)
-    # model = timm.create_model('vit_base_patch16_224.dino', pretrained=True, num_classes=0)
-    # model.eval().to(device)
-    # preprocess = transforms.Compose([
-    #     transforms.Resize(224), transforms.CenterCrop(224),
-    #     transforms.ToTensor(), transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5)),
-    # ])
-    # return model, preprocess, device
+def get_dino_embeddings(pil_images):
+    """Processes a list of PIL images and returns a list of binary blobs."""
+    tensors = torch.stack([transform(img) for img in pil_images]).to(device)
+    with torch.no_grad():
+        features = model.forward_features(tensors)
+        embeddings = torch.nn.functional.normalize(features['x_norm_clstoken'], dim=-1)
+        return [emb.cpu().numpy().astype(np.float32).tobytes() for emb in embeddings]
 
 def embed(img, model, device):
     with torch.no_grad():
@@ -211,18 +162,16 @@ def embed(img, model, device):
         emb = feats.squeeze(0).cpu().numpy()
     return normalize_vector(emb).astype(np.float32)
 
-def ingest_videos(reembed):
-    conn = sqlite3.connect(DB_PATH)
+def ingest_videos(conn, append):
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
-
-    existing_videos = set(
-        r[0] for r in conn.execute(
-            "SELECT filename FROM photos WHERE media_type='video'"
-        ).fetchall()
-    )
-    print(f"already ingested videos: {len(existing_videos)}")
+    if append:
+        rows = conn.execute("SELECT id, path FROM photos WHERE media_type='video' AND embedding_v2 IS NULL").fetchall()
+    else:
+        rows = conn.execute("SELECT id, path FROM photos WHERE media_type='video'").fetchall()
+    if not rows: return
+    print(f"already ingested videos: {len(rows)}")
 
     # find all videos
     videos = []
@@ -234,11 +183,8 @@ def ingest_videos(reembed):
                 continue
             if f.suffix.lower() not in VIDEO_EXTENSIONS:
                 continue
-            if reembed:
+            else:
                 videos.append(f)
-            if not reembed:
-                if str(f) not in existing_videos:
-                    videos.append(f)
 
     print(f"videos to process: {len(videos)}")
     if not videos:
@@ -290,44 +236,43 @@ def ingest_videos(reembed):
         timestamps = list(range(0, int(duration), FRAME_INTERVAL_SEC))
         if not timestamps:
             timestamps = [0]
-
-        frame_batch = []
-        for i, ts in enumerate(timestamps):
-            thumb_name = f"{video_path.stem}_f{i:04d}_t{ts}.jpg"
+        frame_metadata = []
+        pil_frames = []
+        for idx, ts in enumerate(timestamps):
+            thumb_name = f"{video_path.stem}_f{idx:04d}_t{ts}.jpg"
             thumb_path = os.path.join(THUMBS_DIR, subfolder, thumb_name)
             os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
 
-            if not extract_frame(str(video_path), ts, thumb_path):
-                continue
+            if extract_frame(str(video_path), ts, thumb_path):
+                try:
+                    pil_frames.append(Image.open(thumb_path).convert('RGB'))
+                    frame_metadata.append((photo_id, idx, ts * 1000))
+                except: continue
 
-            try:
-                img = Image.open(thumb_path).convert('RGB')
-            except:
-                continue
-
-            dino = embed(img, model, device)
-
-            frame_batch.append((
-                photo_id, i, ts * 1000,
-                dino.tobytes(),
-            ))
+        blobs = get_dino_embeddings(pil_frames)
+        frame_batch = [(meta[0], meta[1], meta[2], blob) for meta, blob in zip(frame_metadata, blobs)]
+        conn.executemany("""
+            INSERT OR IGNORE INTO video_frames (photo_id, frame_index, timestamp_ms, dino_embedding)
+            VALUES (?, ?, ?, ?)
+        """, frame_batch)
 
         if frame_batch:
-            conn.executemany("""
-                INSERT OR IGNORE INTO video_frames
-                (id, photo_id, frame_index, timestamp_ms, dino_embedding)
-                VALUES (? ?,?,?,?)
-            """, frame_batch)
-            conn.commit()
-            inserted_frames += len(frame_batch)
-
-        if frame_batch:
-            conn.execute(
-                "UPDATE photos SET dino_embedding=? WHERE id=?",
-                (frame_batch[0][3], photo_id)
-            )
-            conn.commit()
-
+            first_frame_blob = frame_batch[0][3]
+            conn.execute("UPDATE photos SET embedding_v2 = ? WHERE id = ?", (first_frame_blob, photo_id))
+            conn.execute("INSERT OR REPLACE INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (photo_id, first_frame_blob))
+            for img in pil_frames:
+                boxes, probs = mtcnn.detect(img)
+                faces = mtcnn(img)
+                if faces is not None and boxes is not None:
+                    for face_tensor, prob in zip(faces, probs):
+                        if prob is None or prob < 0.90: 
+                            continue
+                        with torch.no_grad():
+                            face_feat = facenet_model(face_tensor.unsqueeze(0).to(device))
+                        face_blob = face_feat[0].cpu().numpy().astype(np.float32).tobytes()
+                        cursor = conn.execute("INSERT INTO faces (photo_id, facenet_embedding) VALUES (?, ?)", (photo_id, face_blob))
+                        conn.execute("INSERT OR REPLACE INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
+        conn.commit()
         inserted_videos += 1
 
     conn.close()
@@ -355,37 +300,46 @@ def normalize_vector(v):
     return (v / norm).tolist()
 
 
-def process_image(file_path):
-    """Compute DINO and FaceNet embeddings for a single image"""
-    entry = {"filename": str(file_path), "faces": []}
+def process_images(conn, append, batch_size=32 ):
+    """Processes all photos in the DB that lack embeddings in batches."""
+    if append:
+        rows = conn.execute("SELECT id, path FROM photos WHERE media_type='photo' AND embedding_v2 IS NULL").fetchall()
+    else:
+        rows = conn.execute("SELECT id, path FROM photos WHERE media_type='photo'").fetchall()
+    if not rows: return
+    
+    print(f"Processing {len(rows)} photos...")
+    for i in tqdm(range(0, len(rows), batch_size)):
+        batch = rows[i:i+batch_size]
+        pil_images, valid_items = [], []
 
-    img = Image.open(file_path).convert("RGB")
-    tensor = preprocess(img).unsqueeze(0).to(device)
-    with torch.no_grad():
-        feats = model.forward_features(tensor)
-        if feats.ndim == 3:
-            dino_feat = feats[:, 0, :] 
-        elif feats.ndim == 2:
-            dino_feat = feats 
-        dino_feat = dino_feat.squeeze(0) 
+        for photo_id, path in batch:
+            try:
+                img = Image.open(path).convert("RGB")
+                pil_images.append(img)
+                valid_items.append((photo_id, path))
+            except: continue
 
-    entry["dino_embedding"] = normalize_vector(dino_feat.cpu().numpy())
+        if not pil_images: continue
 
-    boxes, probs = mtcnn.detect(img)
-    faces = mtcnn(img)  
-    if faces is not None and boxes is not None:
-        for face_tensor, prob in zip(faces, probs):
-            if prob is None or prob < 0.90:  
-                continue
-            with torch.no_grad():
-                face_feat = facenet_model(face_tensor.unsqueeze(0).to(device))
-            entry["faces"].append(
-                {
-                    "confidence": float(prob),
-                    "embedding": normalize_vector(face_feat[0].cpu().numpy()),
-                }
-            )
-    return entry
+        blobs = get_dino_embeddings(pil_images)
+
+        for (db_id, path), blob in zip(valid_items, blobs):
+            conn.execute("UPDATE photos SET embedding_v2 = ? WHERE id = ?", (blob, db_id))
+            conn.execute("INSERT OR REPLACE INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (db_id, blob))
+            img = pil_images[valid_items.index((db_id, path))]
+            boxes, probs = mtcnn.detect(img)
+            faces = mtcnn(img)
+            if faces is not None and boxes is not None:
+                for face_tensor, prob in zip(faces, probs):
+                    if prob is None or prob < 0.90: 
+                        continue
+                    with torch.no_grad():
+                        face_feat = facenet_model(face_tensor.unsqueeze(0).to(device))
+                    face_blob = face_feat[0].cpu().numpy().astype(np.float32).tobytes()
+                    cursor = conn.execute("INSERT INTO faces (photo_id, facenet_embedding) VALUES (?, ?)", (db_id, face_blob))
+                    conn.execute("INSERT OR REPLACE INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
+        conn.commit()
 
 
 if __name__ == "__main__":
@@ -400,86 +354,22 @@ if __name__ == "__main__":
         "--output", default="/Volumes/T7/photos_from_icloud-out/embeddings_new.jsonl"
     )
     parser.add_argument(
-        "--verbose", default=False
+        "--append", default=False
     )
     args = parser.parse_args()
-    reembed = args.verbose
+    append = args.append
     base_folder = Path(args.directory)
     output_path = Path(args.output)
     output_path.parent.mkdir(exist_ok=True, parents=True)
     buffer = []
     i = 0
-    processed_files = set()
-    if output_path.exists():
-        with open(output_path, encoding='utf-8', mode="r") as f:
-            for line in f:
-                try:
-                    obj = json.loads(line)
-                    processed_files.add(obj["filename"])
-                except:
-                    continue
-                
-                
-    images_to_process = []
-    videos_to_process = []
-    if not reembed:
-        conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
 
 
-        rows = conn.execute(
-            "SELECT path FROM photos WHERE path IS NOT NULL AND embedding_v2 IS NULL"
-        ).fetchall()
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        process_images(conn, append)
+        ingest_videos(conn, append)
+    finally:
+        conn.close()
 
-        print(f"{len(rows)} photos to embed")
-
-
-        batch_size = 64
-
-        for file in rows:
-            if file.suffix.lower() in IMAGE_EXTENSIONS:
-                images_to_process.append(file)
-            # elif file.suffix.lower() in VIDEO_EXTENSIONS:
-            #     videos_to_process.append(file)
-   
-    else:
-        for subfolder in base_folder.iterdir():
-            if subfolder.is_dir():
-                for file in subfolder.iterdir():
-                    if (
-                            not file.is_file()
-                            or file.suffix.lower() not in IMAGE_EXTENSIONS
-                            or file.name.startswith(".")
-                    ):
-                        continue
-                    elif str(file) in processed_files:
-                        continue
-                    elif file.suffix.lower() in [".jpg", ".jpeg"]:
-                        images_to_process.append(file)
-                    # elif file.suffix.lower() in VIDEO_EXTENSIONS:
-                    #     videos_to_process.append(file)
-    for file in tqdm(images_to_process + videos_to_process, desc="Processing files"):
-        try:
-            if file.suffix.lower() in IMAGE_EXTENSIONS:
-                entry = process_image(file)
-                buffer.append(entry)
-                i += 1
-            # elif file.suffix.lower() in VIDEO_EXTENSIONS:
-            #     entry = embed(file)
-            #     buffer.append(entry)
-            #     i += 1
-    
-        except Exception as e:
-            print(f"Skipping {file}: {e}")
-
-        if len(buffer) >= args.batch_size:
-            with open(output_path, encoding='utf-8', mode="a") as f:
-                for e in buffer:
-                    f.write(json.dumps(e) + "\n")
-            buffer = []
-
-    if buffer:
-        with open(output_path, encoding='utf-8', mode="a") as f:
-            for e in buffer:
-                f.write(json.dumps(e) + "\n")
-        print(f"Processed total {i} images")
-    ingest_videos(args.verbose)
