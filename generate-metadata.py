@@ -1,18 +1,18 @@
 #!/usr/bin/python3
+from generate import DB_PATH, process_images, ingest_videos, model, preprocess
 import argparse
 import json
 import os
 import subprocess
-import time
 from pathlib import Path
+import time
 
 import clip
 import torch
 from PIL import Image
-
+import sqlite3
 data = []
 import pytesseract
-
 
 def dms_to_decimal(degrees, minutes, seconds, direction):
     decimal = degrees + (minutes / 60) + (seconds / 3600)
@@ -30,7 +30,7 @@ def gps_to_decimal(gps_str):
         direction = parts[4]
         return dms_to_decimal(deg, minutes, seconds, direction)
     except Exception:
-        return ""
+        return None
 
 
 def get_location(exif_data):
@@ -74,7 +74,7 @@ def parse_exiftool_json(json_data):
         )
         height = item.get("ExifImageHeight")
         width = item.get("ExifImageWidth")
-
+        media_type = "video" if path.suffix.lower() in {'.mp4', '.mov', '.avi', '.mkv'} else "photo"
         row = [
             str(path.relative_to(path.parents[1])).replace(
                 " ", "_"
@@ -89,6 +89,7 @@ def parse_exiftool_json(json_data):
             "",
             lat,
             lon,
+            media_type,
         ]
         yield row
 
@@ -113,11 +114,25 @@ def run_exiftool(directory):
         )
 
 
-def reorganize_to_jsonl(json_input, jsonl_output):
-    with open(json_input) as f, open(jsonl_output, "w") as out_f:
-        data = json.load(f)
-        for row in parse_exiftool_json(data):
-            out_f.write(json.dumps(row) + "\n")
+def seed_database_with_exif(json_input):
+    """Parses Exiftool JSON and provisions the base database rows."""
+    conn = sqlite3.connect(DB_PATH)
+    
+    with open(json_input) as f:
+        exif_data = json.load(f)
+        
+    print("Populating database with EXIF metadata...")
+    for row in parse_exiftool_json(exif_data):
+        rel_path, file_name, subfolder, created_date, height, width, loc_json, _, lat, lon, media_type = row
+        
+        conn.execute("""
+            INSERT OR IGNORE INTO photos 
+            (filename, subfolder, date, height, width, location, text, lat, lon, path, media_type)
+            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'photo')
+        """, (file_name, subfolder, created_date, height, width, loc_json, lat, lon, rel_path, media_type))
+        
+    conn.commit()
+    conn.close()
 
 
 if __name__ == "__main__":
@@ -127,6 +142,7 @@ if __name__ == "__main__":
     group.add_argument("--image", required=False)
     group.add_argument("--file", required=False)
     group.add_argument("--directory", required=False)
+    parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"using {device}")
@@ -160,8 +176,16 @@ if __name__ == "__main__":
         base_folder = Path(args.directory)
         destination = Path(str(args.directory) + "-out")
         destination.mkdir(exist_ok=True)
-        output_file_path = str(destination / "metadata.jsonl")
+        
         run_exiftool(directory=args.directory)
-        reorganize_to_jsonl(
-            args.directory + "/output.json", args.directory + "-out/metadata.jsonl"
-        )
+        raw_json_output = os.path.join(args.directory, "output.json")
+        seed_database_with_exif(raw_json_output)
+        
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            print("Starting Vector Ingestion Pipeline...")
+            process_images(conn, append=True, batch_size=args.batch_size)
+            ingest_videos(conn, append=True)
+        finally:
+            conn.close()
+        print("All assets successfully scanned, cataloged, and indexed!")
