@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from generate import DB_PATH, process_images, ingest_videos, model, preprocess
+from generate import DB_PATH, process_images, ingest_videos, model, preprocess, BASE_PATH
 import argparse
 import json
 import os
@@ -137,11 +137,11 @@ def seed_database_with_exif(json_input):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="generate", description="Generate metadata")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--text", required=False)
-    group.add_argument("--image", required=False)
-    group.add_argument("--file", required=False)
-    group.add_argument("--directory", required=False)
+    # group = parser.add_mutually_exclusive_group(required=True)
+    # group.add_argument("--text", required=False)
+    # group.add_argument("--image", required=False)
+    # group.add_argument("--file", required=False)
+    parser.add_argument("--directory", required=False, default = BASE_PATH)
     parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
     device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
@@ -149,43 +149,21 @@ if __name__ == "__main__":
     device = torch.device(device)
     # model, preprocess = clip.load("ViT-B/32", device=device)
     images = []
-    if args.text:
-        inputs = clip.tokenize(args.text).to(device)
-        with torch.no_grad():
-            print(model.encode_text(inputs)[0].tolist())
-    elif args.image:
-        image = preprocess(Image.open(args.image)).unsqueeze(0).to(device)
-        with torch.no_grad():
-            print(model.encode_image(image)[0].tolist())
-    elif args.file:
-        with (
-            open(args.file, "r") as input_file,
-            torch.no_grad(),
-            open("output.txt", "w") as output_file,
-        ):
-            st = time.time()
-            c = 0
-            for line in input_file:
-                c += 1
-                inputs = clip.tokenize(line).to(device)
-                embedding = model.encode_text(inputs)[0].tolist()
-                output_file.write(f"{embedding}\n")
-            et = time.time()
-            print(f"{c} embeddings generated in {round(et - st, 3)}s")
-    elif args.directory:
-        base_folder = Path(args.directory)
-        destination = Path(str(args.directory) + "-out")
-        destination.mkdir(exist_ok=True)
+    base_folder = Path(args.directory)
+    print(f"[1/4] Scanning directories and running ExifTool on: {base_folder}")
+    run_exiftool(directory=args.directory)
+    
+    print("[2/4] Seeding raw metadata into SQLite database...")
+    raw_json_output = os.path.join(args.directory, "output.json")
+    seed_database_with_exif(raw_json_output)
+    
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        print("[3/4] Initializing AI Models & starting Photo Vector Pipeline...")
+        process_images(conn, append=True, batch_size=args.batch_size)
         
-        run_exiftool(directory=args.directory)
-        raw_json_output = os.path.join(args.directory, "output.json")
-        seed_database_with_exif(raw_json_output)
-        
-        conn = sqlite3.connect(DB_PATH)
-        try:
-            print("Starting Vector Ingestion Pipeline...")
-            process_images(conn, append=True, batch_size=args.batch_size)
-            ingest_videos(conn, append=True)
-        finally:
-            conn.close()
-        print("All assets successfully scanned, cataloged, and indexed!")
+        print("[4/4] Starting Video Scene/Face Extraction Pipeline...")
+        ingest_videos(conn, append=True)
+    finally:
+        conn.close()
+    print("All assets successfully scanned, cataloged, and indexed!")
