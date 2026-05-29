@@ -144,7 +144,7 @@ if __name__ == "__main__":
     group.add_argument("--directory", required=False)
     parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
     print(f"using {device}")
     device = torch.device(device)
     # model, preprocess = clip.load("ViT-B/32", device=device)
