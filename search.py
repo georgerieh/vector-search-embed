@@ -145,7 +145,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conditions.append("city = ?")
         params.append(city)
     if h3cell:
-        children = list(h3.cell_to_children(h3cell, target_resolution=8))
+        children = list(h3.cell_to_children(h3cell, res=7))
         placeholders = ",".join(["?"] * len(children))
         conditions.append(f"h3_cell IN ({placeholders})")
         params.extend(children)
