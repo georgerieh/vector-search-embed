@@ -182,7 +182,7 @@ def h3population():
     updated_count = 0
     for rowid, lat, lon in rows:
         try:
-            h3_index = h3.geo_to_h3(float(lat), float(lon), 7)
+            h3_index = h3.latlng_to_cell(float(lat), float(lon), 7)
             
             cursor.execute(
                 "UPDATE photos SET h3_cell = ? WHERE rowid = ?", 
