@@ -50,7 +50,7 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
     dino_q = np.array(dino_query, dtype=np.float32).tolist()
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
 
-    sql_where = f"{where_clause} AND" if where_clause else "WHERE"
+    sql_where = f"WHERE {where_clause}" if where_clause else ""
 
     if has_face_query:
         facenet_q = np.array(facenet_query, dtype=np.float32).tolist()
@@ -60,29 +60,38 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
                    (vd.distance + vf.distance) as total_score,
                    COALESCE(p.media_type, 'photo'), p.video_path
             FROM photos p
-            JOIN vec_photos vd ON p.id = vd.id
+            JOIN (
+                SELECT id, distance 
+                FROM vec_photos 
+                WHERE dino_embedding MATCH ? AND k = 500
+            ) vd ON p.id = vd.id
             JOIN faces f ON p.id = f.photo_id
-            JOIN vec_faces vf ON f.id = vf.id
+            JOIN (
+                SELECT id, distance 
+                FROM vec_faces 
+                WHERE facenet_embedding MATCH ? AND k = 500
+            ) vf ON f.id = vf.id
             {sql_where}
-                vd.dino_embedding MATCH ? AND vec_distance_l2(vd.dino_embedding, ?)
-                AND vf.facenet_embedding MATCH ? AND vec_distance_l2(vf.facenet_embedding, ?)
             GROUP BY p.id  
             ORDER BY total_score ASC, p.date DESC
             LIMIT 500
         """
-        params = where_params + (dino_q, dino_q, facenet_q, facenet_q)
+        params = (dino_q, facenet_q) + where_params
     else:
         sql = f"""
             SELECT p.id, p.path, p.location, p.lat, p.lon, v.distance as total_score,
                    COALESCE(p.media_type, 'photo'), p.video_path
             FROM photos p
-            JOIN vec_photos v ON p.id = v.id
+            JOIN (
+                SELECT id, distance 
+                FROM vec_photos 
+                WHERE dino_embedding MATCH ? AND k = 500
+            ) v ON p.id = v.id
             {sql_where} 
-                v.dino_embedding MATCH ? AND vec_distance_l2(v.dino_embedding, ?)
             ORDER BY total_score ASC, p.date DESC
             LIMIT 500
         """
-        params = where_params + (dino_q, dino_q)
+        params = (dino_q,) + where_params
 
     cursor = conn.execute(sql, params)
     rows = cursor.fetchall()
