@@ -183,10 +183,10 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
             })
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
-
-    results = _vector_search(conn, dino_query, facenet_query, where_clause=where, where_params=where_params)
-    conn.close()
-    return results, {"query_time": round(time.time() - st, 3)}
+    else:
+        results = _vector_search(conn, dino_query, facenet_query, where_clause=where, where_params=where_params)
+        conn.close()
+        return results, {"query_time": round(time.time() - st, 3)}
 
 def get_image_embedding(embedding) -> list:
     return (embedding / np.linalg.norm(embedding)).tolist()
