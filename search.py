@@ -10,7 +10,7 @@ CHUNK_SIZE = 10_000
 MOUNT_PATH = "/Volumes/T7/photos_from_icloud"
 import h3
 _DIR = os.path.dirname(os.path.abspath(__file__))
-
+import struct
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.enable_load_extension(True)
@@ -47,13 +47,13 @@ def search_with_images(image, limit, embedding, start_date="", end_date="",
     return rows, stats
 
 def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=()):
-    dino_q = np.array(dino_query, dtype=np.float32).tolist()
+    dino_q = np.array(dino_query, dtype=np.float32).tobytes()
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
 
     sql_where = f"WHERE {where_clause}" if where_clause else ""
 
     if has_face_query:
-        facenet_q = np.array(facenet_query, dtype=np.float32).tolist()
+        facenet_q = np.array(facenet_query, dtype=np.float32).tobytes()
         
         sql = f"""
             SELECT p.id, p.path, p.location, p.lat, p.lon, 
