@@ -6,13 +6,14 @@ import os
 import subprocess
 from pathlib import Path
 import time
-
+import sqlite_vec
 import clip
 import torch
 from PIL import Image
 import sqlite3
 data = []
 import pytesseract
+
 
 def dms_to_decimal(degrees, minutes, seconds, direction):
     decimal = degrees + (minutes / 60) + (seconds / 3600)
@@ -128,7 +129,7 @@ def seed_database_with_exif(json_input):
         conn.execute("""
             INSERT OR IGNORE INTO photos 
             (filename, subfolder, date, height, width, location, text, lat, lon, path, media_type)
-            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, 'photo')
+            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
         """, (file_name, subfolder, created_date, height, width, loc_json, lat, lon, rel_path, media_type))
         
     conn.commit()
@@ -141,9 +142,14 @@ if __name__ == "__main__":
     # group.add_argument("--text", required=False)
     # group.add_argument("--image", required=False)
     # group.add_argument("--file", required=False)
+    
+    parser.add_argument(
+        "--append", action="store_true", default=False
+    )
     parser.add_argument("--directory", required=False, default = BASE_PATH)
     parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
+    append = args.append
     device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
     print(f"using {device}")
     device = torch.device(device)
@@ -159,11 +165,13 @@ if __name__ == "__main__":
     
     conn = sqlite3.connect(DB_PATH)
     try:
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
         print("[3/4] Initializing AI Models & starting Photo Vector Pipeline...")
-        process_images(conn, append=True, batch_size=args.batch_size)
+        process_images(conn, append=append, batch_size=args.batch_size)
         
         print("[4/4] Starting Video Scene/Face Extraction Pipeline...")
-        ingest_videos(conn, append=True)
+        ingest_videos(conn, append=append)
     finally:
         conn.close()
     print("All assets successfully scanned, cataloged, and indexed!")

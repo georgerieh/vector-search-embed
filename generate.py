@@ -15,9 +15,13 @@ import json
 import sqlite3
 from tqdm import tqdm
 from PIL import Image
-
+from datetime import datetime
+current_time = datetime.now()
+print(current_time)
 device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
 print('using', device)
+
+
 #PART 2
 #.schema DDL
 # CREATE TABLE photos (
@@ -79,6 +83,31 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                          std=[0.229, 0.224, 0.225]),
 ])
+
+def find_fuzzy_path(relative_path, base_dir):
+    """
+    Blazing fast, non-recursive path finder for 1-level deep asset structures.
+    Directly checks variations without scanning the directory tree.
+    """
+    direct_path = os.path.join(base_dir, relative_path)
+    if os.path.exists(direct_path):
+        return direct_path
+    
+    path_obj = Path(relative_path)
+    subfolder = path_obj.parent.name
+    filename = path_obj.name
+    
+    sub_variants = [subfolder, subfolder.replace('_', ' '), subfolder.replace(' ', '_')]
+    file_variants = [filename, filename.replace('_', ' '), filename.replace(' ', '_')]
+    
+    for s in dict.fromkeys(sub_variants):
+        for f in dict.fromkeys(file_variants):
+            candidate = os.path.join(base_dir, s, f)
+            if os.path.exists(candidate):
+                return candidate
+                
+    return None
+
 def get_batch_embeddings(images, model, device):
     """
     Takes a list of PIL images, returns a list of binary blobs.
@@ -163,15 +192,16 @@ def embed(img, model, device):
     return normalize_vector(emb).astype(np.float32)
 
 def ingest_videos(conn, append):
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+    # conn.execute("PRAGMA journal_mode=WAL")
+    # conn.execute("PRAGMA synchronous=NORMAL")
+    # conn.execute("PRAGMA foreign_keys=ON")
     if append:
         rows = conn.execute("SELECT id, path FROM photos WHERE media_type='video' AND embedding_v2 IS NULL").fetchall()
+        print(f"Videos remaining to process: {len(rows)}")
     else:
         rows = conn.execute("SELECT id, path FROM photos WHERE media_type='video'").fetchall()
+        print(f"Total video records in database: {len(rows)}")
     if not rows: return
-    print(f"already ingested videos: {len(rows)}")
 
     # find all videos
     videos = []
@@ -255,23 +285,28 @@ def ingest_videos(conn, append):
             INSERT OR IGNORE INTO video_frames (photo_id, frame_index, timestamp_ms, dino_embedding)
             VALUES (?, ?, ?, ?)
         """, frame_batch)
+        inserted_frames += len(frame_batch)
 
         if frame_batch:
             first_frame_blob = frame_batch[0][3]
             conn.execute("UPDATE photos SET embedding_v2 = ? WHERE id = ?", (first_frame_blob, photo_id))
-            conn.execute("INSERT OR REPLACE INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (photo_id, first_frame_blob))
+            conn.execute("DELETE FROM vec_photos WHERE id = ?", (photo_id,))
+            conn.execute("INSERT INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (photo_id, first_frame_blob))
             for img in pil_frames:
-                boxes, probs = mtcnn.detect(img)
-                faces = mtcnn(img)
-                if faces is not None and boxes is not None:
+                img_detect = img.copy()
+                img_detect.thumbnail((1024, 1024))
+                faces, probs = mtcnn(img_detect, return_prob=True)
+                if faces is not None and probs is not None:
                     for face_tensor, prob in zip(faces, probs):
-                        if prob is None or prob < 0.90: 
-                            continue
+                        if prob is None or prob < 0.90: continue
                         with torch.no_grad():
                             face_feat = facenet_model(face_tensor.unsqueeze(0).to(device))
                         face_blob = face_feat[0].cpu().numpy().astype(np.float32).tobytes()
+                        
                         cursor = conn.execute("INSERT INTO faces (photo_id, facenet_embedding) VALUES (?, ?)", (photo_id, face_blob))
-                        conn.execute("INSERT OR REPLACE INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
+                        conn.execute("DELETE FROM vec_faces WHERE id = ?", (cursor.lastrowid,))
+                        conn.execute("INSERT INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
+        conn.commit()
         conn.commit()
         inserted_videos += 1
 
@@ -280,7 +315,7 @@ def ingest_videos(conn, append):
 
     
     
-mtcnn = MTCNN(keep_all=True, device=device)
+mtcnn = MTclean = MTCNN(keep_all=True, device=torch.device("cpu"))
 facenet_model = InceptionResnetV1(pretrained="vggface2").eval().to(device)
 
 preprocess = transforms.Compose(
@@ -300,7 +335,7 @@ def normalize_vector(v):
     return (v / norm).tolist()
 
 
-def process_images(conn, append, batch_size=32 ):
+def process_images(conn, append, batch_size=32):
     """Processes all photos in the DB that lack embeddings in batches."""
     if append:
         rows = conn.execute("SELECT id, path FROM photos WHERE media_type='photo' AND embedding_v2 IS NULL").fetchall()
@@ -308,38 +343,53 @@ def process_images(conn, append, batch_size=32 ):
         rows = conn.execute("SELECT id, path FROM photos WHERE media_type='photo'").fetchall()
     if not rows: return
     
+    missing_count = 0  # Dedicated counter
     print(f"Processing {len(rows)} photos...")
+    
     for i in tqdm(range(0, len(rows), batch_size)):
         batch = rows[i:i+batch_size]
         pil_images, valid_items = [], []
 
         for photo_id, path in batch:
+            full_path = find_fuzzy_path(path, BASE_PATH)
+            if not full_path:
+                missing_count += 1  # Safely increment here
+                continue
+                
             try:
-                img = Image.open(path).convert("RGB")
+                img = Image.open(full_path).convert("RGB")
                 pil_images.append(img)
                 valid_items.append((photo_id, path))
-            except: continue
-
+            except Exception as e: 
+                continue
+                
         if not pil_images: continue
 
         blobs = get_dino_embeddings(pil_images)
 
         for (db_id, path), blob in zip(valid_items, blobs):
             conn.execute("UPDATE photos SET embedding_v2 = ? WHERE id = ?", (blob, db_id))
-            conn.execute("INSERT OR REPLACE INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (db_id, blob))
+            
+            conn.execute("DELETE FROM vec_photos WHERE id = ?", (db_id,))
+            conn.execute("INSERT INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (db_id, blob))
             img = pil_images[valid_items.index((db_id, path))]
-            boxes, probs = mtcnn.detect(img)
-            faces = mtcnn(img)
-            if faces is not None and boxes is not None:
+            img_detect = img.copy()
+            img_detect.thumbnail((1024, 1024))
+            faces, probs = mtcnn(img_detect, return_prob=True)
+            
+            if faces is not None and probs is not None:
                 for face_tensor, prob in zip(faces, probs):
-                    if prob is None or prob < 0.90: 
-                        continue
+                    if prob is None or prob < 0.90: continue
                     with torch.no_grad():
+                        # Push the isolated face crop to GPU for Facenet execution
                         face_feat = facenet_model(face_tensor.unsqueeze(0).to(device))
                     face_blob = face_feat[0].cpu().numpy().astype(np.float32).tobytes()
+                     
                     cursor = conn.execute("INSERT INTO faces (photo_id, facenet_embedding) VALUES (?, ?)", (db_id, face_blob))
-                    conn.execute("INSERT OR REPLACE INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
-        conn.commit()
+                    conn.execute("DELETE FROM vec_faces WHERE id = ?", (cursor.lastrowid,))
+                    conn.execute("INSERT INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
+        
+    print(f"Could not find files on disk for {missing_count} database entries.")
 
 
 if __name__ == "__main__":
@@ -349,7 +399,7 @@ if __name__ == "__main__":
         help="Path to image folder",
         default="/Volumes/T7/photos_from_icloud",
     )
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=32) 
     parser.add_argument(
         "--output", default="/Volumes/T7/photos_from_icloud-out/embeddings_new.jsonl"
     )
@@ -368,8 +418,12 @@ if __name__ == "__main__":
 
     conn = sqlite3.connect(DB_PATH)
     try:
-        process_images(conn, append)
+        # process_images(conn, append)
         ingest_videos(conn, append)
     finally:
         conn.close()
 
+
+
+current_time = datetime.now()
+print(current_time)

@@ -74,7 +74,7 @@
     loadingBar.style.width = '0%';
 
     const dinoBuffer = await fetchWithProgress(
-    'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx',
+    'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
     (pct) => {
         const display = Math.round(pct * 45); // DINO occupies 0–45%
         loadingBar.style.width = display + '%';
