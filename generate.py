@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import os
 import subprocess
-
+import h3
 import numpy as np
 import torch
 from PIL import Image
@@ -16,6 +16,7 @@ import sqlite3
 from tqdm import tqdm
 from PIL import Image
 from datetime import datetime
+import sys
 current_time = datetime.now()
 print(current_time)
 device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
@@ -147,11 +148,60 @@ BATCH_SIZE = 50
 
 os.makedirs(THUMBS_DIR, exist_ok=True)
 
-# def normalize_vector(v):
-#     arr = np.array(v, dtype=np.float32)
-#     norm = np.linalg.norm(arr)
-#     return (arr / norm) if norm != 0 else arr
 
+
+def h3population():
+    print(f"Connecting to database at {DB_PATH}...")
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    query = """
+        SELECT rowid, latitude, longitude 
+        FROM photos 
+        WHERE latitude IS NOT NULL 
+          AND longitude IS NOT NULL 
+          AND (h3_cell IS NULL OR h3_cell = '' OR h3_cell = 'None');
+    """
+    
+    try:
+        cursor.execute(query)
+        rows = cursor.fetchall()
+    except sqlite3.OperationalError as e:
+        print(f"Database error: {e}")
+        print("Please check if column names match 'latitude', 'longitude', and 'h3_cell'.")
+        conn.close()
+        return
+
+    if not rows:
+        print("✓ All photos with GPS data already have an H3 index populated!")
+        conn.close()
+        return
+
+    print(f"Found {len(rows)} photos missing an H3 Resolution 7 index. Processing...")
+
+    updated_count = 0
+    for rowid, lat, lon in rows:
+        try:
+            h3_index = h3.geo_to_h3(float(lat), float(lon), 7)
+            
+            cursor.execute(
+                "UPDATE photos SET h3_cell = ? WHERE rowid = ?", 
+                (h3_index, rowid)
+            )
+            updated_count += 1
+            
+            if updated_count % 500 == 0:
+                print(f"  Indexed {updated_count} photos...")
+                
+        except Exception as err:
+            print(f"  Skipping row {rowid} due to conversion error: {err}")
+
+    conn.commit()
+    conn.close()
+    print(f"Success! Fixed {updated_count} rows. Database index is now complete.")
+
+
+    
 def get_video_duration(path):
     result = subprocess.run([
         'ffprobe', '-v', 'error',
@@ -418,8 +468,9 @@ if __name__ == "__main__":
 
     conn = sqlite3.connect(DB_PATH)
     try:
-        # process_images(conn, append)
+        process_images(conn, append)
         ingest_videos(conn, append)
+        h3population()
     finally:
         conn.close()
 

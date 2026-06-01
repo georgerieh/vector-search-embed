@@ -154,6 +154,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
     where_params = tuple(params)
 
     if not dino_query:
+        print('Executing')
         sql = f"""
             SELECT path, location, lat, lon, media_type, video_path 
             FROM photos {where} 
