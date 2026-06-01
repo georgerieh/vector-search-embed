@@ -76,13 +76,31 @@
     const dinoBuffer = await fetchWithProgress(
     'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
     (pct) => {
-        const display = Math.round(pct * 45); // DINO occupies 0–45%
+        const display = Math.round(pct * 20); // 0–20% allocation
         loadingBar.style.width = display + '%';
-        loadingText.textContent = `Loading DINO... ${display}%`;
-    })  // add token param);
+        loadingText.textContent = `Loading DINO Graph... ${display}%`;
+    }
+    );
+
+    loadingText.textContent = 'Loading DINO Weights...';
+
+    const dinoDataBuffer = await fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
+        (pct) => {
+            const display = 20 + Math.round(pct * 25); // 20–45% allocation
+            loadingBar.style.width = display + '%';
+            loadingText.textContent = `Loading DINO Weights... ${display}%`;
+        }
+    );
 
     dinoSession = await InferenceSession.create(dinoBuffer, {
         executionProviders: ['webgpu', 'wasm'],
+        externalData: [
+            {
+                data: new Uint8Array(dinoDataBuffer),
+                path: 'dinov2_vitb14.onnx.data'
+            }
+        ]
     });
 
     loadingBar.style.width = '50%';
