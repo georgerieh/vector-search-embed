@@ -5,6 +5,8 @@ import sqlite3
 import os
 from pathlib import Path
 from torchvision import transforms
+import cv2
+import numpy as np
 
 transform = transforms.Compose([
     transforms.Resize(256),
@@ -13,9 +15,10 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], 
                          std=[0.229, 0.224, 0.225]),
 ])
-# M1 GPU
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
 print('using', device)
+
 
 model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
 model = model.to(device)
@@ -61,14 +64,11 @@ for i in tqdm(range(0, len(rows), batch_size)):
     if not images:
         continue
     
-    # inputs = processor(images=images, return_tensors="pt").to(device)
     tensors = torch.stack([transform(img) for img in images]).to(device)
     with torch.no_grad():
-        # outputs = model(**inputs)
         embeddings = model(tensors)  # returns (B, 768) CLS token
         embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
-        # embeddings = outputs.pooler_output  # (B, 768)
-        # embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
+        
         embeddings = embeddings.cpu().numpy()
     
     for path, emb in zip(paths, embeddings):
