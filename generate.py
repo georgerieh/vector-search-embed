@@ -156,10 +156,10 @@ def h3population():
     cursor = conn.cursor()
 
     query = """
-        SELECT rowid, latitude, longitude 
+        SELECT rowid, lat, lon 
         FROM photos 
-        WHERE latitude IS NOT NULL 
-          AND longitude IS NOT NULL 
+        WHERE lat IS NOT NULL 
+          AND lat IS NOT NULL 
           AND (h3_cell IS NULL OR h3_cell = '' OR h3_cell = 'None');
     """
     
