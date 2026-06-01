@@ -262,8 +262,13 @@ let markerClusters = null;
         const img = await loadImage(fileInput.files[0]);
         loadingText.textContent = 'Computing visual embedding...';
         loadingBar.style.width = '30%';
-        const dinoResults = await dinoSession.run({ pixel_values: preprocessDino(img) });
-        embedding = normalize(Array.from(dinoResults.last_hidden_state.data).slice(0, 768));
+        const dinoInputName = dinoSession.inputNames[0]; 
+        const dinoFeeds = {};
+        dinoFeeds[dinoInputName] = preprocessDino(img);
+
+        const dinoResults = await dinoSession.run(dinoFeeds);
+        const dinoOutputName = dinoSession.outputNames[0];
+        embedding = normalize(Array.from(dinoResults[dinoOutputName].data).slice(0, 768));
         loadingBar.style.width = '60%';
         if (document.getElementById('detect-faces').checked) {
         loadingText.textContent = 'Detecting faces...';
@@ -278,9 +283,14 @@ let markerClusters = null;
             loadingText.textContent = 'Recognizing face...';
             loadingBar.style.width = '80%';
             const best = detection.detections.reduce((a,b) => a.categories[0].score > b.categories[0].score ? a : b);
-            const faceResults = await faceNetSession.run({ input: preprocessFace(img, best.boundingBox) });
+            const facenetInputName = faceNetSession.inputNames[0];
+            const facenetFeeds = {};
+            facenetFeeds[facenetInputName] = preprocessFace(img, best.boundingBox);
 
-            facenetEmbedding = normalize(Array.from(faceResults.embedding.data));
+            const faceResults = await faceNetSession.run(facenetFeeds);
+
+            const facenetOutputName = faceNetSession.outputNames[0];
+            facenetEmbedding = normalize(Array.from(faceResults[facenetOutputName].data));
 
             const cropCanvas = document.createElement('canvas');
             cropCanvas.width = 160; cropCanvas.height = 160;
