@@ -138,22 +138,24 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conn.close()
         return [], {"query_time": round(time.time() - st, 3)}
 
-    # build WHERE
+    from_clause = "photos p"
     conditions = []
     params = []
+
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
+    
     if has_face_query:
         facenet_q = np.array(facenet_query, dtype=np.float32).tobytes()
-        sql = f"""
-             p
+        from_clause = """
+            photos p
             JOIN faces f ON p.id = f.photo_id
             JOIN (
                 SELECT id, distance 
                 FROM vec_faces 
-                WHERE facenet_embedding MATCH ? AND k = 50
+                WHERE facenet_embedding MATCH ? AND k = ?
             ) vf ON f.id = vf.id
         """
-        params.append(facenet_q)
+        params.extend([facenet_q, limit * 2])
     elif start_date and end_date:
         conditions.append("date BETWEEN ? AND ?")
         params.extend([start_date, end_date])
@@ -172,18 +174,18 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conditions.append(f"h3_cell IN ({placeholders})")
         params.extend(children)
 
-    where = (sql if has_face_query else "" + "WHERE " + " AND ".join(conditions)) if conditions else ""
-    where_params = tuple(params)
-
+    where_str = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    
     if not dino_query:
-        print('Executing')
         sql = f"""
-            SELECT path, location, lat, lon, media_type, video_path 
-            FROM photos {where} 
-            GROUP BY path
-            ORDER BY date DESC LIMIT ?
+            SELECT p.path, p.location, p.lat, p.lon, p.media_type, p.video_path 
+            FROM {from_clause} 
+            {where_str}
+            GROUP BY p.path
+            ORDER BY {"vf.distance ASC" if has_face_query else "p.date DESC"} 
+            LIMIT ?
         """
-        rows = conn.execute(sql, where_params + (limit,)).fetchall()
+        rows = conn.execute(sql, tuple(params) + (limit,)).fetchall()
         seen = set()
         results = []
         for path, location, lat, lon, media_type, video_path in rows:
