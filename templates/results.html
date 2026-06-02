@@ -367,7 +367,96 @@ let markerClusters = null;
     setTimeout(() => { document.getElementById('loading-container').style.display = 'none'; }, 600);
     setView('grid');
 });
+    document.getElementById('btn-open-face-upload').addEventListener('click', () => {
+    document.getElementById('face-upload-modal').style.display = 'flex';
+});
 
+document.getElementById('face-upload-close').addEventListener('click', () => {
+    document.getElementById('face-upload-modal').style.display = 'none';
+});
+
+const dropZone = document.getElementById('face-drop-zone');
+const faceFileInput = document.getElementById('face-file-input');
+
+dropZone.addEventListener('click', () => faceFileInput.click());
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#007aff';
+    dropZone.style.background = '#f0f7ff';
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.style.borderColor = '#c7c7cc';
+    dropZone.style.background = '#fafafa';
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#c7c7cc';
+    dropZone.style.background = '#fafafa';
+    if (e.dataTransfer.files.length) {
+        processFaceImage(e.dataTransfer.files[0]);
+    }
+});
+
+faceFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+        processFaceImage(e.target.files[0]);
+    }
+});
+
+async function processFaceImage(file) {
+    const loadingText = document.getElementById('face-upload-loading');
+    loadingText.style.display = 'block';
+    dropZone.style.display = 'none';
+
+    try {
+        const img = await loadImage(file);
+        
+        let detection = { detections: [] };
+        if (faceDetector) {
+            detection = faceDetector.detect(img);
+        }
+
+        if (detection.detections && detection.detections.length > 0) {
+            // Find the most confident face
+            const best = detection.detections.reduce((a, b) => 
+                a.categories[0].score > b.categories[0].score ? a : b
+            );
+            
+            // Run FaceNet
+            const facenetInputName = faceNetSession.inputNames[0];
+            const facenetFeeds = {};
+            facenetFeeds[facenetInputName] = preprocessFace(img, best.boundingBox);
+
+            const faceResults = await faceNetSession.run(facenetFeeds);
+            const facenetOutputName = faceNetSession.outputNames[0];
+            const facenetEmbedding = normalize(Array.from(faceResults[facenetOutputName].data));
+
+            // Crop it for the thumbnail
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = 160; cropCanvas.height = 160;
+            const cropCtx = cropCanvas.getContext('2d');
+            const box = best.boundingBox;
+            cropCtx.drawImage(img, box.originX, box.originY, box.width, box.height, 0, 0, 160, 160);
+
+            // Hide upload modal and trigger your existing save face modal
+            document.getElementById('face-upload-modal').style.display = 'none';
+            showFaceModal(facenetEmbedding, cropCanvas, 60000); // Allow 60s to type a name
+        } else {
+            alert("No face detected in this image. Try a clearer photo.");
+        }
+    } catch (err) {
+        console.error("Face processing failed:", err);
+        alert("An error occurred while processing the face.");
+    } finally {
+        // Reset UI
+        loadingText.style.display = 'none';
+        dropZone.style.display = 'flex';
+        faceFileInput.value = ''; 
+    }
+}
     let _favSet = null;
 
     async function loadFavoritesFromDisk() {
@@ -1574,10 +1663,12 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
     <div id="face-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
     <div id="no-faces-msg" style="font-size:11px;color:#8e8e93;">No saved faces yet</div>
 </div>
-<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#3c3c43;cursor:pointer;">
-    <input type="checkbox" id="detect-faces" style="cursor:pointer;">
-    Detect faces
-</label>
+<div class="field-group" style="margin-top: 4px;">
+    <div id="btn-open-face-upload" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#f2f2f7;border-radius:10px;font-size:13px;color:#3c3c43;cursor:pointer;transition:background 0.15s;user-select:none;">
+        <span style="display:flex;align-items:center;gap:8px;">🧑‍🦱 Add new face</span>
+        <span style="color:#8e8e93;font-weight:bold;">➔</span>
+    </div>
+</div>
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
              <button type="button" id="clear-btn" class="search-btn" style="background:#f2f2f7;color:#3c3c43;">Clear</button>
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
@@ -2045,6 +2136,38 @@ async function loadStats() {
         gap:3px;
         align-content:start;
     "></div>
+</div>
+<div id="face-upload-modal" style="
+    display:none;position:fixed;inset:0;
+    background:rgba(0,0,0,0.7);
+    z-index:3000;align-items:center;justify-content:center;
+    backdrop-filter:blur(10px);
+">
+    <div style="
+        background:white;border-radius:20px;padding:24px;
+        width:320px;display:flex;flex-direction:column;align-items:center;gap:16px;
+        box-shadow:0 40px 100px rgba(0,0,0,0.4);
+        position:relative;
+    ">
+        <button id="face-upload-close" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:18px;cursor:pointer;color:#8e8e93;transition:color 0.15s;">✕</button>
+        <div style="font-size:17px;font-weight:600;">Extract a Face</div>
+        
+        <div id="face-drop-zone" style="
+            width:100%;height:140px;border:2px dashed #c7c7cc;border-radius:12px;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            color:#8e8e93;font-size:13px;cursor:pointer;transition:all 0.2s;
+            text-align:center;padding:10px;background:#fafafa;
+        ">
+            <span style="font-size:28px;margin-bottom:8px;">📥</span>
+            Drop a picture here<br>or click to browse
+            <input type="file" id="face-file-input" accept="image/*" style="display:none;">
+        </div>
+        
+        <div id="face-upload-loading" style="display:none;font-size:13px;color:#007aff;font-weight:500;">
+            <div class="spinner" style="width:20px;height:20px;margin:0 auto 10px;border-width:2px;"></div>
+            Detecting face...
+        </div>
+    </div>
 </div>
 <div id="face-modal" style="
     display:none;position:fixed;inset:0;
