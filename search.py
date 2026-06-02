@@ -155,7 +155,8 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
                 WHERE facenet_embedding MATCH ? AND k = ?
             ) vf ON f.id = vf.id
         """
-        params.extend([facenet_q, limit * 2])
+        vector_k = max(limit * 5, 200)
+        params.extend([facenet_q, vector_k])
     elif start_date and end_date:
         conditions.append("date BETWEEN ? AND ?")
         params.extend([start_date, end_date])
