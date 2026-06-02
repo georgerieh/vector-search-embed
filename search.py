@@ -63,18 +63,18 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
             JOIN (
                 SELECT id, distance 
                 FROM vec_photos 
-                WHERE dino_embedding MATCH ? AND k = 500
+                WHERE dino_embedding MATCH ? AND k = 50
             ) vd ON p.id = vd.id
             JOIN faces f ON p.id = f.photo_id
             JOIN (
                 SELECT id, distance 
                 FROM vec_faces 
-                WHERE facenet_embedding MATCH ? AND k = 500
+                WHERE facenet_embedding MATCH ? AND k = 50
             ) vf ON f.id = vf.id
             {sql_where}
             GROUP BY p.id  
             ORDER BY total_score ASC, p.date DESC
-            LIMIT 500
+            LIMIT 50
         """
         params = (dino_q, facenet_q) + where_params
     else:
@@ -85,11 +85,11 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
             JOIN (
                 SELECT id, distance 
                 FROM vec_photos 
-                WHERE dino_embedding MATCH ? AND k = 500
+                WHERE dino_embedding MATCH ? AND k = 50
             ) v ON p.id = v.id
             {sql_where} 
             ORDER BY total_score ASC, p.date DESC
-            LIMIT 500
+            LIMIT 50
         """
         params = (dino_q,) + where_params
 
@@ -141,7 +141,20 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
     # build WHERE
     conditions = []
     params = []
-    if start_date and end_date:
+    has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
+    if has_face_query:
+        facenet_q = np.array(facenet_query, dtype=np.float32).tobytes()
+        sql = f"""
+             p
+            JOIN faces f ON p.id = f.photo_id
+            JOIN (
+                SELECT id, distance 
+                FROM vec_faces 
+                WHERE facenet_embedding MATCH ? AND k = 50
+            ) vf ON f.id = vf.id
+        """
+        params.append(facenet_q)
+    elif start_date and end_date:
         conditions.append("date BETWEEN ? AND ?")
         params.extend([start_date, end_date])
     elif start_date:
@@ -159,7 +172,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conditions.append(f"h3_cell IN ({placeholders})")
         params.extend(children)
 
-    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    where = (sql if has_face_query else "" + "WHERE " + " AND ".join(conditions)) if conditions else ""
     where_params = tuple(params)
 
     if not dino_query:
