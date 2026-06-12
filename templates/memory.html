@@ -20,6 +20,27 @@
 </head>
 
 <body>
+        <div class="toolbar">
+        <div class="view-toggle">
+          <button
+            class="view-btn active"
+            id="btn-grid"
+            onclick="window.location.href='/main'">
+            Grid
+          </button>
+          <button class="view-btn" id="btn-info"  onclick="window.location.href='/info'">
+            Stats!
+          </button>
+          <button class="view-btn" id="btn-memory"  onclick="window.location.href='/memory'">
+            Memory
+          </button>
+          <button class="view-btn" id="btn-review"  onclick="window.location.href='/review'">
+            Review
+          </button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <div class="toolbar-info" id="toolbar-info"></div>
+      </div>
         <div style="flex: 1; overflow-y: auto">
           <div
             id="memory-loading"
