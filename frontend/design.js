@@ -163,395 +163,394 @@ document
               window._statsData = data;
             })
             .catch(() => {});
-        }, 2000);
-      </script>
-    </div>
-    <!-- end info-pane -->
+        }, 2000)
+    // </div>
+    // <!-- end info-pane -->
 
-    <!-- LIGHTBOX -->
-    <div
-      id="album-overlay"
-      style="
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(242, 242, 247, 0.97);
-        backdrop-filter: blur(20px);
-        z-index: 500;
-        flex-direction: column;
-        overflow: hidden;
-      "
-    >
-      <div
-        style="
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          background: rgba(255, 255, 255, 0.88);
-          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-        "
-      >
-        <button
-          id="album-back"
-          style="
-            border: none;
-            background: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #007aff;
-            padding: 4px 8px;
-          "
-        >
-          ‹
-        </button>
-        <div
-          id="album-overlay-title"
-          style="font-size: 17px; font-weight: 600; flex: 1"
-        ></div>
-        <div
-          id="album-overlay-count"
-          style="font-size: 12px; color: #8e8e93"
-        ></div>
-      </div>
-      <div
-        id="album-overlay-grid"
-        style="
-          flex: 1;
-          overflow-y: auto;
-          padding: 12px;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-          gap: 3px;
-          align-content: start;
-        "
-      ></div>
-    </div>
-    <div
-      id="favorites-overlay"
-      style="
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(242, 242, 247, 0.97);
-        backdrop-filter: blur(20px);
-        z-index: 500;
-        flex-direction: column;
-        overflow: hidden;
-      "
-    >
-      <div
-        style="
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          background: rgba(255, 255, 255, 0.88);
-          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-        "
-      >
-        <button
-          id="fav-overlay-close"
-          style="
-            border: none;
-            background: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #007aff;
-            padding: 4px 8px;
-          "
-        >
-          ‹
-        </button>
-        <button
-          id="fav-batch-delete-btn"
-          onclick="window.deleteSelectedFavs()"
-          style="
-            display: none;
-            color: #ff3b30;
-            margin-left: 15px;
-            background: none;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-          "
-        >
-          ✕ Delete Selected From Disk
-        </button>
-        <div style="font-size: 17px; font-weight: 600; flex: 1">Favorites</div>
-        <div
-          id="fav-overlay-count"
-          style="font-size: 12px; color: #8e8e93"
-        ></div>
-      </div>
-      <div
-        id="fav-overlay-grid"
-        style="
-          flex: 1;
-          overflow-y: auto;
-          padding: 12px;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-          gap: 3px;
-          align-content: start;
-        "
-      ></div>
-    </div>
-    <div
-      id="face-upload-modal"
-      style="
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 3000;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(10px);
-      "
-    >
-      <div
-        style="
-          background: white;
-          border-radius: 20px;
-          padding: 24px;
-          width: 320px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-          box-shadow: 0 40px 100px rgba(0, 0, 0, 0.4);
-          position: relative;
-        "
-      >
-        <button
-          id="face-upload-close"
-          style="
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            background: none;
-            border: none;
-            font-size: 18px;
-            cursor: pointer;
-            color: #8e8e93;
-            transition: color 0.15s;
-          "
-        >
-          ✕
-        </button>
-        <div style="font-size: 17px; font-weight: 600">Extract a Face</div>
+    // <!-- LIGHTBOX -->
+    // <div
+    //   id="album-overlay"
+    //   style="
+    //     display: none;
+    //     position: fixed;
+    //     inset: 0;
+    //     background: rgba(242, 242, 247, 0.97);
+    //     backdrop-filter: blur(20px);
+    //     z-index: 500;
+    //     flex-direction: column;
+    //     overflow: hidden;
+    //   "
+    // >
+    //   <div
+    //     style="
+    //       display: flex;
+    //       align-items: center;
+    //       gap: 12px;
+    //       padding: 12px 16px;
+    //       background: rgba(255, 255, 255, 0.88);
+    //       border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    //     "
+    //   >
+    //     <button
+    //       id="album-back"
+    //       style="
+    //         border: none;
+    //         background: none;
+    //         font-size: 20px;
+    //         cursor: pointer;
+    //         color: #007aff;
+    //         padding: 4px 8px;
+    //       "
+    //     >
+    //       ‹
+    //     </button>
+    //     <div
+    //       id="album-overlay-title"
+    //       style="font-size: 17px; font-weight: 600; flex: 1"
+    //     ></div>
+    //     <div
+    //       id="album-overlay-count"
+    //       style="font-size: 12px; color: #8e8e93"
+    //     ></div>
+    //   </div>
+    //   <div
+    //     id="album-overlay-grid"
+    //     style="
+    //       flex: 1;
+    //       overflow-y: auto;
+    //       padding: 12px;
+    //       display: grid;
+    //       grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    //       gap: 3px;
+    //       align-content: start;
+    //     "
+    //   ></div>
+    // </div>
+    // <div
+    //   id="favorites-overlay"
+    //   style="
+    //     display: none;
+    //     position: fixed;
+    //     inset: 0;
+    //     background: rgba(242, 242, 247, 0.97);
+    //     backdrop-filter: blur(20px);
+    //     z-index: 500;
+    //     flex-direction: column;
+    //     overflow: hidden;
+    //   "
+    // >
+    //   <div
+    //     style="
+    //       display: flex;
+    //       align-items: center;
+    //       gap: 12px;
+    //       padding: 12px 16px;
+    //       background: rgba(255, 255, 255, 0.88);
+    //       border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    //     "
+    //   >
+    //     <button
+    //       id="fav-overlay-close"
+    //       style="
+    //         border: none;
+    //         background: none;
+    //         font-size: 20px;
+    //         cursor: pointer;
+    //         color: #007aff;
+    //         padding: 4px 8px;
+    //       "
+    //     >
+    //       ‹
+    //     </button>
+    //     <button
+    //       id="fav-batch-delete-btn"
+    //       onclick="window.deleteSelectedFavs()"
+    //       style="
+    //         display: none;
+    //         color: #ff3b30;
+    //         margin-left: 15px;
+    //         background: none;
+    //         border: none;
+    //         font-weight: 600;
+    //         cursor: pointer;
+    //       "
+    //     >
+    //       ✕ Delete Selected From Disk
+    //     </button>
+    //     <div style="font-size: 17px; font-weight: 600; flex: 1">Favorites</div>
+    //     <div
+    //       id="fav-overlay-count"
+    //       style="font-size: 12px; color: #8e8e93"
+    //     ></div>
+    //   </div>
+    //   <div
+    //     id="fav-overlay-grid"
+    //     style="
+    //       flex: 1;
+    //       overflow-y: auto;
+    //       padding: 12px;
+    //       display: grid;
+    //       grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    //       gap: 3px;
+    //       align-content: start;
+    //     "
+    //   ></div>
+    // </div>
+    // <div
+    //   id="face-upload-modal"
+    //   style="
+    //     display: none;
+    //     position: fixed;
+    //     inset: 0;
+    //     background: rgba(0, 0, 0, 0.7);
+    //     z-index: 3000;
+    //     align-items: center;
+    //     justify-content: center;
+    //     backdrop-filter: blur(10px);
+    //   "
+    // >
+    //   <div
+    //     style="
+    //       background: white;
+    //       border-radius: 20px;
+    //       padding: 24px;
+    //       width: 320px;
+    //       display: flex;
+    //       flex-direction: column;
+    //       align-items: center;
+    //       gap: 16px;
+    //       box-shadow: 0 40px 100px rgba(0, 0, 0, 0.4);
+    //       position: relative;
+    //     "
+    //   >
+    //     <button
+    //       id="face-upload-close"
+    //       style="
+    //         position: absolute;
+    //         top: 12px;
+    //         right: 12px;
+    //         background: none;
+    //         border: none;
+    //         font-size: 18px;
+    //         cursor: pointer;
+    //         color: #8e8e93;
+    //         transition: color 0.15s;
+    //       "
+    //     >
+    //       ✕
+    //     </button>
+    //     <div style="font-size: 17px; font-weight: 600">Extract a Face</div>
 
-        <div
-          id="face-drop-zone"
-          style="
-            width: 100%;
-            height: 140px;
-            border: 2px dashed #c7c7cc;
-            border-radius: 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #8e8e93;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            padding: 10px;
-            background: #fafafa;
-          "
-        >
-          <span style="font-size: 28px; margin-bottom: 8px"></span>
-          Drop a picture here<br />or click to browse
-          <input
-            type="file"
-            id="face-file-input"
-            accept="image/*"
-            style="display: none"
-          />
-        </div>
+    //     <div
+    //       id="face-drop-zone"
+    //       style="
+    //         width: 100%;
+    //         height: 140px;
+    //         border: 2px dashed #c7c7cc;
+    //         border-radius: 12px;
+    //         display: flex;
+    //         flex-direction: column;
+    //         align-items: center;
+    //         justify-content: center;
+    //         color: #8e8e93;
+    //         font-size: 13px;
+    //         cursor: pointer;
+    //         transition: all 0.2s;
+    //         text-align: center;
+    //         padding: 10px;
+    //         background: #fafafa;
+    //       "
+    //     >
+    //       <span style="font-size: 28px; margin-bottom: 8px"></span>
+    //       Drop a picture here<br />or click to browse
+    //       <input
+    //         type="file"
+    //         id="face-file-input"
+    //         accept="image/*"
+    //         style="display: none"
+    //       />
+    //     </div>
 
-        <div
-          id="face-upload-loading"
-          style="
-            display: none;
-            font-size: 13px;
-            color: #007aff;
-            font-weight: 500;
-          "
-        >
-          <div
-            class="spinner"
-            style="
-              width: 20px;
-              height: 20px;
-              margin: 0 auto 10px;
-              border-width: 2px;
-            "
-          ></div>
-          Detecting face...
-        </div>
-      </div>
-    </div>
-    <div
-      id="face-modal"
-      style="
-        display: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 3000;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(10px);
-      "
-    >
-      <div
-        style="
-          background: white;
-          border-radius: 20px;
-          padding: 24px;
-          width: 320px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-          box-shadow: 0 40px 100px rgba(0, 0, 0, 0.4);
-        "
-      >
-        <div style="font-size: 17px; font-weight: 600">Face detected</div>
-        <canvas
-          id="face-crop-canvas"
-          width="160"
-          height="160"
-          style="border-radius: 50%; border: 3px solid #007aff"
-        ></canvas>
-        <div style="font-size: 13px; color: #8e8e93; text-align: center">
-          Save this face to search for similar photos?
-        </div>
-        <input
-          id="face-name-input"
-          placeholder="Enter a name..."
-          style="
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #e5e5ea;
-            border-radius: 10px;
-            font-size: 14px;
-            font-family: inherit;
-            outline: none;
-          "
-        />
-        <div style="display: flex; gap: 8px; width: 100%">
-          <button
-            id="face-modal-cancel"
-            style="
-              flex: 1;
-              padding: 11px;
-              border: 1px solid #e5e5ea;
-              background: white;
-              border-radius: 10px;
-              font-size: 14px;
-              font-weight: 600;
-              cursor: pointer;
-              font-family: inherit;
-            "
-          >
-            Skip
-          </button>
-          <button
-            id="face-modal-save"
-            style="
-              flex: 1;
-              padding: 11px;
-              border: none;
-              background: #007aff;
-              color: white;
-              border-radius: 10px;
-              font-size: 14px;
-              font-weight: 600;
-              cursor: pointer;
-              font-family: inherit;
-            "
-          >
-            Save face
-          </button>
-        </div>
-      </div>
-    </div>
-    <div id="lightbox">
-      <button class="lb-nav" id="lightbox-prev">‹</button>
-      <div class="lightbox-content">
-        <img id="lightbox-img" src="" alt="" />
-        <div class="lightbox-meta">
-          <span id="lightbox-counter"></span>
-          <span id="lightbox-location"></span>
-        </div>
-      </div>
-      <button class="lb-nav" id="lightbox-next">›</button>
-      <div class="lightbox-actions">
-        <button class="lb-action" id="lightbox-fav">♥ Favorite</button>
-        <button class="lb-action" id="lightbox-close">✕</button>
-      </div>
-    </div>
+    //     <div
+    //       id="face-upload-loading"
+    //       style="
+    //         display: none;
+    //         font-size: 13px;
+    //         color: #007aff;
+    //         font-weight: 500;
+    //       "
+    //     >
+    //       <div
+    //         class="spinner"
+    //         style="
+    //           width: 20px;
+    //           height: 20px;
+    //           margin: 0 auto 10px;
+    //           border-width: 2px;
+    //         "
+    //       ></div>
+    //       Detecting face...
+    //     </div>
+    //   </div>
+    // </div>
+    // <div
+    //   id="face-modal"
+    //   style="
+    //     display: none;
+    //     position: fixed;
+    //     inset: 0;
+    //     background: rgba(0, 0, 0, 0.7);
+    //     z-index: 3000;
+    //     align-items: center;
+    //     justify-content: center;
+    //     backdrop-filter: blur(10px);
+    //   "
+    // >
+    //   <div
+    //     style="
+    //       background: white;
+    //       border-radius: 20px;
+    //       padding: 24px;
+    //       width: 320px;
+    //       display: flex;
+    //       flex-direction: column;
+    //       align-items: center;
+    //       gap: 16px;
+    //       box-shadow: 0 40px 100px rgba(0, 0, 0, 0.4);
+    //     "
+    //   >
+    //     <div style="font-size: 17px; font-weight: 600">Face detected</div>
+    //     <canvas
+    //       id="face-crop-canvas"
+    //       width="160"
+    //       height="160"
+    //       style="border-radius: 50%; border: 3px solid #007aff"
+    //     ></canvas>
+    //     <div style="font-size: 13px; color: #8e8e93; text-align: center">
+    //       Save this face to search for similar photos?
+    //     </div>
+    //     <input
+    //       id="face-name-input"
+    //       placeholder="Enter a name..."
+    //       style="
+    //         width: 100%;
+    //         padding: 10px 12px;
+    //         border: 1px solid #e5e5ea;
+    //         border-radius: 10px;
+    //         font-size: 14px;
+    //         font-family: inherit;
+    //         outline: none;
+    //       "
+    //     />
+    //     <div style="display: flex; gap: 8px; width: 100%">
+    //       <button
+    //         id="face-modal-cancel"
+    //         style="
+    //           flex: 1;
+    //           padding: 11px;
+    //           border: 1px solid #e5e5ea;
+    //           background: white;
+    //           border-radius: 10px;
+    //           font-size: 14px;
+    //           font-weight: 600;
+    //           cursor: pointer;
+    //           font-family: inherit;
+    //         "
+    //       >
+    //         Skip
+    //       </button>
+    //       <button
+    //         id="face-modal-save"
+    //         style="
+    //           flex: 1;
+    //           padding: 11px;
+    //           border: none;
+    //           background: #007aff;
+    //           color: white;
+    //           border-radius: 10px;
+    //           font-size: 14px;
+    //           font-weight: 600;
+    //           cursor: pointer;
+    //           font-family: inherit;
+    //         "
+    //       >
+    //         Save face
+    //       </button>
+    //     </div>
+    //   </div>
+    // </div>
+    // <div id="lightbox">
+    //   <button class="lb-nav" id="lightbox-prev">‹</button>
+    //   <div class="lightbox-content">
+    //     <img id="lightbox-img" src="" alt="" />
+    //     <div class="lightbox-meta">
+    //       <span id="lightbox-counter"></span>
+    //       <span id="lightbox-location"></span>
+    //     </div>
+    //   </div>
+    //   <button class="lb-nav" id="lightbox-next">›</button>
+    //   <div class="lightbox-actions">
+    //     <button class="lb-action" id="lightbox-fav">♥ Favorite</button>
+    //     <button class="lb-action" id="lightbox-close">✕</button>
+    //   </div>
+    // </div>
 
-    <!-- LOADING -->
-    <div id="loading-container">
-      <div id="loading-text">Loading...</div>
-      <div class="loading-track"><div id="loading-bar"></div></div>
-    </div>
+    // <!-- LOADING -->
+    // <div id="loading-container">
+    //   <div id="loading-text">Loading...</div>
+    //   <div class="loading-track"><div id="loading-bar"></div></div>
+    // </div>
 
-    <script>
+    // <script>
       window.currentImages = [];
       window.currentView = "grid";
 
-      window.setView = function (view) {
-        window.currentView = view;
-        ["grid", "gallery", "info", "memory"].forEach((v) =>
-          document
-            .getElementById(`btn-${v}`)
-            ?.classList.toggle("active", v === view),
-        );
+      // window.setView = function (view) {
+      //   window.currentView = view;
+      //   ["grid", "gallery", "info", "memory"].forEach((v) =>
+      //     document
+      //       .getElementById(`btn-${v}`)
+      //       ?.classList.toggle("active", v === view),
+      //   );
 
-        const hasResults = window.currentImages.length > 0;
+      //   const hasResults = window.currentImages.length > 0;
 
-        document.getElementById("results-area").style.display =
-          view === "grid" ? "flex" : "none";
-        document.getElementById("map-pane").style.display =
-          view === "grid" ? "flex" : "none";
-        document.getElementById("empty-state").style.display =
-          view === "grid" && !hasResults ? "flex" : "none";
-        document
-          .getElementById("gallery-pane")
-          .classList.toggle("active", view === "gallery");
-        document.getElementById("info-pane").style.display =
-          view === "info" ? "flex" : "none";
-        document.getElementById("memory-pane").style.display =
-          view === "memory" ? "flex" : "none";
-        document.getElementById("review-pane").style.display =
-          view === "review" ? "flex" : "none";
-        document.querySelector(".sidebar").style.display =
-          view === "info" ? "none" : "";
-        document.querySelector(".main").style.marginLeft =
-          view === "info" ? "0" : "260px";
+      //   document.getElementById("results-area").style.display =
+      //     view === "grid" ? "flex" : "none";
+      //   document.getElementById("map-pane").style.display =
+      //     view === "grid" ? "flex" : "none";
+      //   document.getElementById("empty-state").style.display =
+      //     view === "grid" && !hasResults ? "flex" : "none";
+      //   document
+      //     .getElementById("gallery-pane")
+      //     .classList.toggle("active", view === "gallery");
+      //   document.getElementById("info-pane").style.display =
+      //     view === "info" ? "flex" : "none";
+      //   document.getElementById("memory-pane").style.display =
+      //     view === "memory" ? "flex" : "none";
+      //   document.getElementById("review-pane").style.display =
+      //     view === "review" ? "flex" : "none";
+      //   document.querySelector(".sidebar").style.display =
+      //     view === "info" ? "none" : "";
+      //   document.querySelector(".main").style.marginLeft =
+      //     view === "info" ? "0" : "260px";
 
-        if (view === "gallery" && hasResults)
-          buildGallery(window.currentImages, 0);
-        if (view === "info" && !window.statsLoaded) {
-          window.statsLoaded = true;
-          loadStats();
-        }
-        if (view === "info") {
-          document.getElementById("info-pane").scrollTop = 0;
-        }
-        if (view === "memory") loadMemory();
-        if (
-          view === "review" &&
-          !document.getElementById("review-grid").children.length
-        )
-          loadReviewBatch();
-      };
+      //   if (view === "gallery" && hasResults)
+      //     buildGallery(window.currentImages, 0);
+      //   if (view === "info" && !window.statsLoaded) {
+      //     window.statsLoaded = true;
+      //     loadStats();
+      //   }
+      //   if (view === "info") {
+      //     document.getElementById("info-pane").scrollTop = 0;
+      //   }
+      //   if (view === "memory") loadMemory();
+      //   if (
+      //     view === "review" &&
+      //     !document.getElementById("review-grid").children.length
+      //   )
+      //     loadReviewBatch();
+      // };
       let galleryIndex = 0;
 
       function buildGallery(images, startIndex) {
