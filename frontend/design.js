@@ -1,41 +1,45 @@
-document
-  .getElementById("memory-today-btn")
-  .addEventListener("click", async () => {
-    document.getElementById("memory-loading").style.display = "flex";
-    document.getElementById("memory-content").style.display = "none";
+document.addEventListener("DOMContentLoaded", () => {
+  const memoryBtn = document.getElementById("memory-today-btn");
 
-    const resp = await fetch("/photo_of_day");
-    const data = await resp.json();
-    currentMemory = data;
+  if (memoryBtn) {
+    memoryBtn.addEventListener("click", async () => {
+      document.getElementById("memory-loading").style.display = "flex";
+      document.getElementById("memory-content").style.display = "none";
 
-    document.getElementById("memory-title").textContent = data.title;
-    document.getElementById("memory-subtitle").textContent = data.subtitle;
+      const resp = await fetch("/photo_of_day");
+      const data = await resp.json();
+      currentMemory = data;
 
-    if (data.photos.length > 0) {
-      const heroUrl = data.photos[0].url.replace(/^\//, "");
-      const hero = document.getElementById("memory-hero");
-      hero.style.backgroundImage = `url('/thumbnail/${heroUrl}?size=800')`;
-      hero.onclick = () =>
-        window.openLightbox && window.openLightbox(data.photos, 0);
-    }
+      document.getElementById("memory-title").textContent = data.title;
+      document.getElementById("memory-subtitle").textContent = data.subtitle;
 
-    const grid = document.getElementById("memory-grid");
-    grid.innerHTML = "";
-    data.photos.slice(1).forEach((photo, i) => {
-      const url = photo.url.replace(/^\//, "");
-      const cell = document.createElement("div");
-      cell.style.cssText = "aspect-ratio:1;border-radius:4px;cursor:pointer;";
-      cell.style.background = `url('/thumbnail/${url}') center/cover`;
-      cell.addEventListener(
-        "click",
-        () => window.openLightbox && window.openLightbox(data.photos, i + 1),
-      );
-      grid.appendChild(cell);
+      if (data.photos.length > 0) {
+        const heroUrl = data.photos[0].url.replace(/^\//, "");
+        const hero = document.getElementById("memory-hero");
+        hero.style.backgroundImage = `url('/thumbnail/${heroUrl}?size=800')`;
+        hero.onclick = () =>
+          window.openLightbox && window.openLightbox(data.photos, 0);
+      }
+
+      const grid = document.getElementById("memory-grid");
+      grid.innerHTML = "";
+      data.photos.slice(1).forEach((photo, i) => {
+        const url = photo.url.replace(/^\//, "");
+        const cell = document.createElement("div");
+        cell.style.cssText = "aspect-ratio:1;border-radius:4px;cursor:pointer;";
+        cell.style.background = `url('/thumbnail/${url}') center/cover`;
+        cell.addEventListener(
+          "click",
+          () => window.openLightbox && window.openLightbox(data.photos, i + 1),
+        );
+        grid.appendChild(cell);
+      });
+
+      document.getElementById("memory-loading").style.display = "none";
+      document.getElementById("memory-content").style.display = "block";
     });
-
-    document.getElementById("memory-loading").style.display = "none";
-    document.getElementById("memory-content").style.display = "block";
-  });
+  }
+});
 const gridSelected = new Set();
 fetch("/autocomplete")
   .then((r) => r.json())
