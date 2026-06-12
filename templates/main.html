@@ -220,6 +220,16 @@
     </div>
 
     <!-- MAIN -->
+    <script>
+  // Jinja renders this array directly into your HTML page context
+  {% if images %}
+  window.serverImages = {{ images | tojson }};
+  {% else %}
+  window.serverImages = [];
+  {% endif %}
+</script>
+
+<script src="{{ url_for('assets', path='/design.js') }}"></script>
     <div class="main">
       <div class="toolbar">
         <div class="view-toggle">
