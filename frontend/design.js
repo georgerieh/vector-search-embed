@@ -497,57 +497,66 @@ setTimeout(() => {
 window.currentImages = [];
 window.currentView = "grid";
 
-// window.setView = function (view) {
-//   window.currentView = view;
-//   ["grid", "gallery", "info", "memory"].forEach((v) =>
-//     document
-//       .getElementById(`btn-${v}`)
-//       ?.classList.toggle("active", v === view),
-//   );
+// Automatically update the view state and UI elements based on the current browser URL
+window.updateViewFromURL = function () {
+  const path = window.location.pathname.toLowerCase();
 
-//   const hasResults = window.currentImages.length > 0;
+  let view = "grid";
+  if (path.includes("/info")) view = "info";
+  if (path.includes("/memory")) view = "memory";
+  if (path.includes("/review")) view = "review";
+  // if (path.includes("/gallery")) view = "gallery";
 
-//   document.getElementById("results-area").style.display =
-//     view === "grid" ? "flex" : "none";
-//   document.getElementById("map-pane").style.display =
-//     view === "grid" ? "flex" : "none";
-//   document.getElementById("empty-state").style.display =
-//     view === "grid" && !hasResults ? "flex" : "none";
-//   document
-//     .getElementById("gallery-pane")
-//     .classList.toggle("active", view === "gallery");
-//   document.getElementById("info-pane").sseyle.display =
-//     view === "info" ? "flex" : "none";
-//   document.getElementById("memory-pane").style.display =
-//     view === "memory" ? "flex" : "none";
-//   document.getElementById("review-pane").style.display =
-//     view === "review" ? "flex" : "none";
-//   document.querySelector(".sidebar").style.display =
-//     view === "info" ? "none" : "";
-//   document.querySelector(".main").style.marginLeft =
-//     view === "info" ? "0" : "260px";
+  window.currentView = view;
 
-//   if (view === "gallery" && hasResults)
-//     buildGallery(window.currentImages, 0);
-//   if (view === "info" && !window.statsLoaded) {
-//     window.statsLoaded = true;
-//     loadStats();
-//   }
-//   if (view === "info") {
-//     document.getElementById("info-pane").scrollTop = 0;
-//   }
-//   if (view === "memory") loadMemory();
-//   if (
-//     view === "review" &&
-//     !document.getElementById("review-grid").children.length
-//   )
-//     loadReviewBatch();
-// };
+  ["grid", "info", "memory", "review"].forEach((v) => {
+    const btn = document.getElementById(`btn-${v}`);
+    if (btn) {
+      btn.classList.toggle("active", v === view);
+    }
+  });
+
+  const hasResults = window.currentImages && window.currentImages.length > 0;
+
+  if (view === "gallery" && hasResults) {
+    if (typeof buildGallery === "function") {
+      buildGallery(window.currentImages, 0);
+    }
+  }
+
+  if (view === "info") {
+    const infoPane = document.getElementById("info-pane");
+    if (infoPane) infoPane.scrollTop = 0;
+
+    if (!window.statsLoaded && typeof loadStats === "function") {
+      window.statsLoaded = true;
+      loadStats();
+    }
+  }
+
+  if (view === "memory" && typeof loadMemory === "function") {
+    loadMemory();
+  }
+
+  if (view === "review" && typeof loadReviewBatch === "function") {
+    const reviewGrid = document.getElementById("review-grid");
+    if (reviewGrid && !reviewGrid.children.length) {
+      loadReviewBatch();
+    }
+  }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  window.updateViewFromURL();
+});
 let galleryIndex = 0;
 
 function buildGallery(images, startIndex) {
   const main = document.getElementById("gallery-main");
   const strip = document.getElementById("gallery-strip");
+
+  if (!main || !strip) return;
+
   main.querySelectorAll(".gallery-photo").forEach((el) => el.remove());
   strip.innerHTML = "";
   galleryIndex = startIndex;
@@ -557,13 +566,23 @@ function buildGallery(images, startIndex) {
     const photo = document.createElement("div");
     photo.className = "gallery-photo" + (i === startIndex ? " active" : "");
     photo.style.backgroundImage = `url('/thumbnail/${url}')`;
-    main.insertBefore(photo, main.querySelector(".gallery-controls"));
+
+    const controls = main.querySelector(".gallery-controls");
+    if (controls) {
+      main.insertBefore(photo, controls);
+    } else {
+      main.appendChild(photo);
+    }
 
     const thumb = document.createElement("div");
     thumb.className = "strip-thumb" + (i === startIndex ? " active" : "");
     thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
     photo.style.cursor = "pointer";
-    photo.addEventListener("click", () => window.openLightbox(images, i));
+
+    photo.addEventListener(
+      "click",
+      () => window.openLightbox && window.openLightbox(images, i),
+    );
     thumb.addEventListener("click", () => setGalleryIndex(i));
     strip.appendChild(thumb);
   });
@@ -576,7 +595,9 @@ function setGalleryIndex(i) {
   document
     .querySelectorAll(".strip-thumb")
     .forEach((t, idx) => t.classList.toggle("active", idx === i));
+
   galleryIndex = i;
+
   document
     .querySelectorAll(".strip-thumb")
     [
@@ -584,25 +605,47 @@ function setGalleryIndex(i) {
     ]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
 }
 
-document.getElementById("gallery-prev").addEventListener("click", () => {
-  const len = window.currentImages.length;
-  if (len) setGalleryIndex((galleryIndex - 1 + len) % len);
-});
-document.getElementById("gallery-next").addEventListener("click", () => {
-  const len = window.currentImages.length;
-  if (len) setGalleryIndex((galleryIndex + 1) % len);
-});
-document.getElementById("image-in").addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  document.getElementById("file-label-text").textContent =
-    file?.name || "Search by photo";
-  if (file) {
-    const url = URL.createObjectURL(file);
-    document.getElementById("ref-img").src = url;
-    document.getElementById("ref-label").textContent = file.name;
-    document.getElementById("ref-preview").style.display = "block";
-  } else {
-    document.getElementById("ref-preview").style.display = "none";
+document.addEventListener("DOMContentLoaded", () => {
+  const prevBtn = document.getElementById("gallery-prev");
+  const nextBtn = document.getElementById("gallery-next");
+
+  if (prevBtn && nextBtn) {
+    prevBtn.addEventListener("click", () => {
+      const len = window.currentImages ? window.currentImages.length : 0;
+      if (len) setGalleryIndex((galleryIndex - 1 + len) % len);
+    });
+
+    nextBtn.addEventListener("click", () => {
+      const len = window.currentImages ? window.currentImages.length : 0;
+      if (len) setGalleryIndex((galleryIndex + 1) % len);
+    });
+  }
+
+  const imageInput = document.getElementById("image-in");
+
+  if (imageInput) {
+    imageInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      const labelText = document.getElementById("file-label-text");
+
+      if (labelText) {
+        labelText.textContent = file?.name || "Search by photo";
+      }
+
+      if (file) {
+        const url = URL.createObjectURL(file);
+        const refImg = document.getElementById("ref-img");
+        const refLabel = document.getElementById("ref-label");
+        const refPreview = document.getElementById("ref-preview");
+
+        if (refImg) refImg.src = url;
+        if (refLabel) refLabel.textContent = file.name;
+        if (refPreview) refPreview.style.display = "block";
+      } else {
+        const refPreview = document.getElementById("ref-preview");
+        if (refPreview) refPreview.style.display = "none";
+      }
+    });
   }
 });
 // ── RESIZABLE MAP ──
