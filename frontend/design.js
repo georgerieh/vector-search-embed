@@ -495,7 +495,7 @@ setTimeout(() => {
 
 // <script>
 window.currentImages = [];
-window.currentView = "grid";
+// window.currentView = "grid";
 
 // Automatically update the view state and UI elements based on the current browser URL
 window.updateViewFromURL = function () {
