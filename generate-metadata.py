@@ -168,10 +168,10 @@ if __name__ == "__main__":
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         print("[3/4] Initializing AI Models & starting Photo Vector Pipeline...")
-        process_images(conn, append=append, batch_size=args.batch_size)
+        process_images(conn, append=append,base_path=base_folder, batch_size=args.batch_size)
         
         print("[4/4] Starting Video Scene/Face Extraction Pipeline...")
-        ingest_videos(conn, append=append)
+        ingest_videos(conn, append=append, base_path=base_folder)
     finally:
         conn.close()
     print("All assets successfully scanned, cataloged, and indexed!")
