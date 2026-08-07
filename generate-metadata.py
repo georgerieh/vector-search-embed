@@ -1,18 +1,21 @@
-#!/usr/bin/python3
-from generate import DB_PATH, process_images, ingest_videos, model, preprocess, BASE_PATH
+#!/usr/bin/env python3
 import argparse
 import json
 import os
-import subprocess
 from pathlib import Path
-import time
-import sqlite_vec
-import clip
+import sqlite3
+import subprocess
 import torch
 from PIL import Image
-import sqlite3
-data = []
-import pytesseract
+import sqlite_vec
+
+from generate import (
+    BASE_PATH,
+    DB_PATH,
+    ingest_videos,
+    process_images,
+    h3population
+)
 
 
 def dms_to_decimal(degrees, minutes, seconds, direction):
@@ -35,143 +38,136 @@ def gps_to_decimal(gps_str):
 
 
 def get_location(exif_data):
+    """Extracts GPS coordinates and formats them as a GeoJSON Feature."""
     if "GPSLongitude" in exif_data and "GPSLatitude" in exif_data:
         lon = gps_to_decimal(exif_data["GPSLongitude"])
         lat = gps_to_decimal(exif_data["GPSLatitude"])
         if lon is not None and lat is not None:
-            return [
-                {
-                    "type": "Feature",
-                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
-                },
-                lat,
-                lon,
-            ]
-    return ["", 0.0, 0.0]
+            geojson_feature = {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            }
+            return geojson_feature, lat, lon
+    return None, 0.0, 0.0
 
 
-def get_text_from_image(file_path):
-    try:
-        return " ".join(
-            pytesseract.image_to_string(Image.open(file_path), lang="eng+rus").split()
-        )
-    except Exception:
-        return ""
-
-
-def parse_exiftool_json(json_data):
+def parse_exiftool_json(json_data, target_directory):
     for item in json_data:
-        filename = os.path.basename(item.get("SourceFile", ""))
+        source_file = item.get("SourceFile", "")
+        if not source_file:
+            continue
+
+        path = Path(source_file).resolve()
+        filename = path.name
+
         if filename.startswith("."):
-            continue  # skip dot-files
+            continue  # Skip hidden files
 
-        path = Path(item.get("SourceFile"))
         subfolder = path.parent.name
-        file_name = path.name
+        location_obj, lat, lon = get_location(item)
+        location_str = json.dumps(location_obj) if location_obj else ""
 
-        location, lat, lon = get_location(item)
-        created_date = (
-            item.get("CreateDate", "").split(" ")[0] if "CreateDate" in item else ""
-        )
+        created_date = item.get("CreateDate", "").split(" ")[0] if "CreateDate" in item else ""
         height = item.get("ExifImageHeight")
         width = item.get("ExifImageWidth")
-        media_type = "video" if path.suffix.lower() in {'.mp4', '.mov', '.avi', '.mkv'} else "photo"
-        row = [
-            str(path.relative_to(path.parents[1])).replace(
-                " ", "_"
-            ),  # relative path with subfolder
-            file_name,
+        
+        media_type = "video" if path.suffix.lower() in {'.mp4', '.mov', '.avi', '.mkv', '.m4v'} else "photo"
+
+        # Calculate path relative to BASE_PATH so 'Samsung' is included in the stored string
+        try:
+            rel_path = str(path.relative_to(Path(BASE_PATH).resolve()))
+        except ValueError:
+            # Fallback if outside BASE_PATH: use path relative to parent directory
+            rel_path = os.path.join(Path(target_directory).name, path.name)
+
+        yield (
+            filename,
             subfolder,
             created_date,
             height,
             width,
-            json.dumps(location) if location else "",
-            # get_text_from_image(path),
-            "",
+            location_str,
+            "",  # text placeholder
             lat,
             lon,
+            rel_path,
             media_type,
-        ]
-        yield row
+        )
 
 
 def run_exiftool(directory):
     output_file = os.path.join(directory, "output.json")
-    with open(output_file, "w") as f:
-        subprocess.run(
-            [
-                "exiftool",
-                "-r",  # recursive
-                "-Make",
-                "-CreateDate",
-                "-ExifImageHeight",
-                "-ExifImageWidth",
-                "-GPSLongitude",
-                "-GPSLatitude",
-                "-j",  # JSON output
-                directory,
-            ],
-            stdout=f,
-        )
+    subprocess.run(
+        [
+            "exiftool",
+            "-r",
+            "-Make",
+            "-CreateDate",
+            "-ExifImageHeight",
+            "-ExifImageWidth",
+            "-GPSLongitude",
+            "-GPSLatitude",
+            "-j",
+            directory,
+        ],
+        stdout=open(output_file, "w"),
+        check=True,
+    )
 
 
-def seed_database_with_exif(json_input):
-    """Parses Exiftool JSON and provisions the base database rows."""
+
+def seed_database_with_exif(json_input, target_directory):
+    """Parses ExifTool JSON and inserts rows into SQLite database."""
     conn = sqlite3.connect(DB_PATH)
-    
+
     with open(json_input) as f:
         exif_data = json.load(f)
-        
-    print("Populating database with EXIF metadata...")
-    for row in parse_exiftool_json(exif_data):
-        rel_path, file_name, subfolder, created_date, height, width, loc_json, _, lat, lon, media_type = row
-        
-        conn.execute("""
-            INSERT OR IGNORE INTO photos 
-            (filename, subfolder, date, height, width, location, text, lat, lon, path, media_type)
-            VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
-        """, (file_name, subfolder, created_date, height, width, loc_json, lat, lon, rel_path, media_type))
-        
-    conn.commit()
-    conn.close()
 
+    print("Populating database with EXIF metadata...")
+    rows = list(parse_exiftool_json(exif_data, target_directory))
+
+    with conn:
+        conn.executemany("""
+            INSERT OR REPLACE INTO photos 
+            (filename, subfolder, date, height, width, location, text, lat, lon, path, media_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rows)
+
+    conn.close()
+    print(f"Seeded/updated {len(rows)} asset records in SQLite.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="generate", description="Generate metadata")
-    # group = parser.add_mutually_exclusive_group(required=True)
-    # group.add_argument("--text", required=False)
-    # group.add_argument("--image", required=False)
-    # group.add_argument("--file", required=False)
-    
-    parser.add_argument(
-        "--append", action="store_true", default=False
-    )
-    parser.add_argument("--directory", required=False, default = BASE_PATH)
+    parser.add_argument("--append", action="store_true", default=False)
+    parser.add_argument("--directory", required=False, default=BASE_PATH)
     parser.add_argument("--batch_size", type=int, default=32)
     args = parser.parse_args()
+
     append = args.append
+    base_folder = Path(args.directory).resolve()
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'mps' if torch.mps.is_available() else 'cpu')
-    print(f"using {device}")
-    device = torch.device(device)
-    # model, preprocess = clip.load("ViT-B/32", device=device)
-    images = []
-    base_folder = Path(args.directory)
+    print(f"Using compute device: {device}")
+
     print(f"[1/4] Scanning directories and running ExifTool on: {base_folder}")
-    run_exiftool(directory=args.directory)
-    
+    run_exiftool(directory=str(base_folder))
+
     print("[2/4] Seeding raw metadata into SQLite database...")
-    raw_json_output = os.path.join(args.directory, "output.json")
-    seed_database_with_exif(raw_json_output)
-    
+    raw_json_output = os.path.join(base_folder, "output.json")
+    seed_database_with_exif(raw_json_output, base_folder)
+
     conn = sqlite3.connect(DB_PATH)
     try:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
+
         print("[3/4] Initializing AI Models & starting Photo Vector Pipeline...")
-        process_images(conn, append=append,base_path=base_folder, batch_size=args.batch_size)
-        
+        process_images(conn, append=append, base_path=str(base_folder), batch_size=args.batch_size)
+
         print("[4/4] Starting Video Scene/Face Extraction Pipeline...")
-        ingest_videos(conn, append=append, base_path=base_folder)
+        ingest_videos(conn, append=append, base_path=str(base_folder))
+        h3population()
     finally:
         conn.close()
+
     print("All assets successfully scanned, cataloged, and indexed!")

@@ -430,32 +430,25 @@ def normalize_vector(v):
 
 def process_images(conn, append, base_path, batch_size=32):
     """
-    Processes or re-indexes photos in the DB matching the target base_path.
-    
-    append=False : Re-indexes ALL photos in base_path (overwrites embeddings).
-    append=True  : Processes ONLY photos in base_path missing embeddings.
+    Processes or re-indexes photos in the DB matching target base_path.
     """
-    # 1. Extract folder name (e.g. "Samsung" from "/Volumes/T7/photos_from_icloud/Samsung")
     folder_name = os.path.basename(os.path.normpath(base_path))
     path_pattern = f"%{folder_name}%"
 
-    # 2. Build SQL query based on append flag
     where_clauses = ["media_type='photo'", "path LIKE ?"]
     params = [path_pattern]
 
     if append:
-        # APPEND MODE: Only fetch photos in this folder missing embeddings
-        # where_clauses.append("embedding_v2 IS NULL")
+        where_clauses.append("embedding_v2 IS NULL")
         print(f"Checking for unindexed photos in '{folder_name}'...")
     else:
-        # RE-INDEX MODE: Fetch ALL photos in this folder to re-process them
-        print(f"RE-INDEXING ALL photos in directory: '{folder_name}'...")
+        print(f"RE-INDEXING ALL photos in directory pattern: '{folder_name}'...")
 
     query = f"SELECT id, path FROM photos WHERE {' AND '.join(where_clauses)}"
     rows = conn.execute(query, params).fetchall()
 
     if not rows:
-        print(f"No matching photos found to process for '{folder_name}'.")
+        print(f"No matching photos found in database for '{folder_name}'.")
         return
 
     missing_count = 0
@@ -466,12 +459,12 @@ def process_images(conn, append, base_path, batch_size=32):
         pil_images, valid_items = [], []
 
         for photo_id, path in batch:
-            full_path = find_fuzzy_path(path, base_path)
-            if not full_path:
+            # Resolve against BASE_PATH since path string in DB contains 'Samsung/...'
+            full_path = find_fuzzy_path(path, BASE_PATH)
+            if not full_path or not os.path.exists(full_path):
                 missing_count += 1
                 continue
             try:
-                # Safely open and load pixel data without keeping file handles open
                 with Image.open(full_path) as img:
                     pil_img = img.convert("RGB")
                     pil_img.load()
@@ -483,26 +476,20 @@ def process_images(conn, append, base_path, batch_size=32):
         if not pil_images:
             continue
 
-        # Generate DINO Embeddings (or re-generate on re-index)
         blobs = get_dino_embeddings(pil_images)
 
-        # Atomic transaction per batch
         with conn:
             for (db_id, path), blob, img in zip(valid_items, blobs, pil_images):
-                # Update/Overwrite existing photo embedding
                 conn.execute("UPDATE photos SET embedding_v2 = ? WHERE id = ?", (blob, db_id))
                 conn.execute("DELETE FROM vec_photos WHERE id = ?", (db_id,))
                 conn.execute("INSERT INTO vec_photos(id, dino_embedding) VALUES (?, ?)", (db_id, blob))
 
-                # Re-detect faces
                 img_detect = img.copy()
                 img_detect.thumbnail((1024, 1024))
                 faces, probs = mtcnn(img_detect, return_prob=True)
 
                 if faces is not None and probs is not None:
-                    # Clear out old face embeddings for this photo before inserting new ones
                     conn.execute("DELETE FROM faces WHERE photo_id = ?", (db_id,))
-                    
                     for face_tensor, prob in zip(faces, probs):
                         if prob is None or prob < 0.90:
                             continue
@@ -517,8 +504,9 @@ def process_images(conn, append, base_path, batch_size=32):
                             conn.execute("DELETE FROM vec_faces WHERE id = ?", (cursor.lastrowid,))
                             conn.execute("INSERT INTO vec_faces(id, facenet_embedding) VALUES (?, ?)", (cursor.lastrowid, face_blob))
 
-    print(f"Done. Could not find files on disk for {missing_count} database entries.")
-    
+    if missing_count > 0:
+        print(f"Could not find files on disk for {missing_count} database entries.")
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -545,8 +533,8 @@ if __name__ == "__main__":
 
     conn = sqlite3.connect(DB_PATH)
     try:
-        process_images(conn, append, base_path=base_folder)
-        ingest_videos(conn, append, base_path=base_folder)
+        # process_images(conn, append, base_path=base_folder)
+        # ingest_videos(conn, append, base_path=base_folder)
         h3population()
     finally:
         conn.close()
