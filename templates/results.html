@@ -21,6 +21,7 @@
     const loadingText = document.getElementById('loading-text');
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
+    ort.env.wasm.proxy = false;
     
    async function fetchWithProgress(url, onProgress) {
     const response = await fetch(url);
@@ -68,25 +69,24 @@ function updateCombinedProgress() {
     
     // 1. Download all model buffers concurrently with progress tracking
     const [dinoBuffer, dinoDataBuffer, facenetBuffer, vision] = await Promise.all([
-        fetchWithProgress(
-            'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
-            (pct) => { progressDino = pct; updateCombinedProgress(); }
-        ),
-        fetchWithProgress(
-            'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
-            (pct) => { progressDinoData = pct; updateCombinedProgress(); }
-        ),
-        fetchWithProgress(
-            'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
-            (pct) => { progressFacenet = pct; updateCombinedProgress(); }
-        ),
-        FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
+    fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
+        (pct) => { progressDino = pct; updateCombinedProgress(); }
+    ),
+    fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
+        (pct) => { progressDinoData = pct; updateCombinedProgress(); }
+    ),
+    fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
+        (pct) => { progressFacenet = pct; updateCombinedProgress(); }
+    ),
+    FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
     ]);
     
-    loadingText.textContent = 'Initializing AI engines... (this may take a moment)';
+    loadingText.textContent = 'Initializing AI engines...';
     loadingBar.style.width = '95%';
     
-    // 2. Pass external data buffer directly into InferenceSession options & initialize sessions in parallel
     const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
         InferenceSession.create(dinoBuffer, {
             executionProviders: ['webgpu', 'wasm'],
