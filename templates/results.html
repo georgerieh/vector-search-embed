@@ -22,116 +22,102 @@
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
     let dinoSession = null;
-    function renderFavStrip() {
-        const strip = document.getElementById('fav-strip');
-        strip.innerHTML = '';
-        const favs = getFavorites();
-        if (favs.length === 0) {
-            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
-            return;
-        }
-        favs.forEach(url => {
-            const el = document.createElement('div');
-            el.className = 'fav-thumb';
-            el.style.backgroundImage = `url('/thumbnail/${url}')`;
-            el.title = url.split('/').pop();
-            el.addEventListener('click', () => {
-                const allFavs = getFavorites().map(u => ({ url: u, score: 0, lat: null, lon: null, location: null }));
-                const i = allFavs.findIndex(img => img.url === url);
-                openLightbox(allFavs, i >= 0 ? i : 0);
-            });
-            strip.appendChild(el);
-        });
-    }
-    window.renderFavStrip = renderFavStrip;
+    
     async function fetchWithProgress(url, onProgress) {
-        const response = await fetch(url)
-        const contentLength = response.headers.get('Content-Length');
-        const total = contentLength ? parseInt(contentLength) : null;
-        const reader = response.body.getReader();
-        const chunks = [];
-        let received = 0;
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.byteLength;
-            if (total) onProgress(received / total);
-        }
-
-        // reassemble
-        const buffer = new Uint8Array(received);
-        let offset = 0;
-        for (const chunk of chunks) {
-            buffer.set(chunk, offset);
-            offset += chunk.byteLength;
-        }
-        return buffer.buffer;
+    const response = await fetch(url)
+    const contentLength = response.headers.get('Content-Length');
+    const total = contentLength ? parseInt(contentLength) : null;
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        if (total) onProgress(received / total);
     }
-    loadingText.textContent = 'Loading DINO...';
-    loadingBar.style.width = '0%';
 
-    const dinoBuffer = await fetchWithProgress(
-    'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
-    (pct) => {
-        const display = Math.round(pct * 20); // 0–20% allocation
-        loadingBar.style.width = display + '%';
-        loadingText.textContent = `Loading DINO Graph... ${display}%`;
+    // reassemble
+    const buffer = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+        buffer.set(chunk, offset);
+        offset += chunk.byteLength;
     }
+    return buffer.buffer;
+}
+
+loadingText.textContent = 'Downloading Models... 0%';
+loadingBar.style.width = '0%';
+
+// 1. Track progress for each file independently
+let progressDino = 0;
+let progressDinoData = 0;
+let progressFacenet = 0;
+
+function updateCombinedProgress() {
+    const totalDisplay = Math.round(
+        (progressDino * 20) + 
+        (progressDinoData * 25) + 
+        (progressFacenet * 45)
     );
-
-    loadingText.textContent = 'Loading DINO Weights...';
-
-    const dinoDataBuffer = await fetchWithProgress(
-        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
-        (pct) => {
-            const display = 20 + Math.round(pct * 25); // 20–45% allocation
-            loadingBar.style.width = display + '%';
-            loadingText.textContent = `Loading DINO Weights... ${display}%`;
-        }
-    );
-
-    dinoSession = await InferenceSession.create(dinoBuffer, {
-        executionProviders: ['webgpu', 'wasm'],
-        externalData: [
-            {
-                data: new Uint8Array(dinoDataBuffer),
-                path: 'dinov2_vitb14.onnx.data'
-            }
-        ]
-    });
-
-    loadingBar.style.width = '50%';
-    loadingText.textContent = 'Loading FaceNet...';
-
-    const facenetBuffer = await fetchWithProgress('https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx', (pct) => {
-        const display = 50 + Math.round(pct * 40); // FaceNet occupies 50–90%
-        loadingBar.style.width = display + '%';
-        loadingText.textContent = `Loading FaceNet... ${display}%`;
-    });
-
-    const faceNetSession = await InferenceSession.create(facenetBuffer, {
-        executionProviders: ['webgpu', 'wasm'],
-    });
-
+    loadingBar.style.width = totalDisplay + '%';
+    loadingText.textContent = `Downloading Models... ${totalDisplay}%`;
+    }
+    const [dinoBuffer, dinoDataBuffer, facenetBuffer, vision] = await Promise.all([
+        fetchWithProgress(
+            'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
+            (pct) => { progressDino = pct; updateCombinedProgress(); }
+        ),
+        fetchWithProgress(
+            'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
+            (pct) => { progressDinoData = pct; updateCombinedProgress(); }
+        ),
+        fetchWithProgress(
+            'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
+            (pct) => { progressFacenet = pct; updateCombinedProgress(); }
+        ),
+        // We can also start downloading the MediaPipe WebAssembly files at the same time
+        FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
+    ]);
+    
+    loadingText.textContent = 'Initializing AI engines in WebGPU... (this may take a moment)';
     loadingBar.style.width = '95%';
-    loadingText.textContent = 'Loading face detector...';
-    const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm');
-    const faceDetector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' },
-        runningMode: 'IMAGE',
-        minDetectionConfidence: 0.9,
-    });
-
+    
+    // 3. Initialize all inference sessions concurrently
+    let dinoSession, faceNetSession, faceDetector;
+    
+    [dinoSession, faceNetSession, faceDetector] = await Promise.all([
+        InferenceSession.create(dinoBuffer, {
+            executionProviders: ['webgpu', 'wasm'],
+            externalData: [
+                {
+                    data: new Uint8Array(dinoDataBuffer),
+                    path: 'dinov2_vitb14.onnx.data'
+                }
+            ]
+        }),
+        InferenceSession.create(facenetBuffer, {
+            executionProviders: ['webgpu', 'wasm'],
+        }),
+        FaceDetector.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' },
+            runningMode: 'IMAGE',
+            minDetectionConfidence: 0.9,
+        })
+    ]);
+    
     loadingBar.style.width = '100%';
     loadingText.textContent = '✓ Ready — upload a photo to search';
     btn.disabled = false;
+    
     setTimeout(() => {
         loadingBar.style.width = '0%';
         loadingText.textContent = '';
         document.getElementById('loading-container').style.display = 'none';
-    }, 2000); // longer so user sees it's ready
+    }, 2000);
 
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
@@ -821,7 +807,28 @@ async function processFaceImage(file) {
     if (serverImages.length > 0) window.renderResults({ images: serverImages });
     {% endif %}
 window.favOverlaySelected = new Set();
-
+function renderFavStrip() {
+        const strip = document.getElementById('fav-strip');
+        strip.innerHTML = '';
+        const favs = getFavorites();
+        if (favs.length === 0) {
+            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
+            return;
+        }
+        favs.forEach(url => {
+            const el = document.createElement('div');
+            el.className = 'fav-thumb';
+            el.style.backgroundImage = `url('/thumbnail/${url}')`;
+            el.title = url.split('/').pop();
+            el.addEventListener('click', () => {
+                const allFavs = getFavorites().map(u => ({ url: u, score: 0, lat: null, lon: null, location: null }));
+                const i = allFavs.findIndex(img => img.url === url);
+                openLightbox(allFavs, i >= 0 ? i : 0);
+            });
+            strip.appendChild(el);
+        });
+    }
+    window.renderFavStrip = renderFavStrip;
 async function openFavoritesOverlay() {
     const overlay = document.getElementById('favorites-overlay');
     const grid = document.getElementById('fav-overlay-grid');
