@@ -21,7 +21,6 @@
     const loadingText = document.getElementById('loading-text');
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
-    let dinoSession = null;
     
     async function fetchWithProgress(url, onProgress) {
     const response = await fetch(url)
