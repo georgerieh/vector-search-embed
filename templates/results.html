@@ -560,7 +560,7 @@ async function processFaceImage(file) {
         
         const cleanUrl = url.startsWith(BASE) ? url.slice(BASE.length) : url;
         const lightboxImg = document.getElementById('lightbox-img');
-    lightboxImg.src = `/thumbnail/${url}?size=800`;
+    lightboxImg.src = `/files/${url}`;
     lightboxImg.style.filter = 'blur(2px)';
     const full = new Image();
     full.onload = () => {
