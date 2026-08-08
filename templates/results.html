@@ -58,35 +58,34 @@ loadingBar.style.width = '0%';
 
 let progressFacenet = 0;
 
-function updateProgress(facenetPct) {
-    // FaceNet takes up to 70% of loading bar; remaining 30% for session compilation
-    const display = Math.round(facenetPct * 70);
+function updateCombinedProgress() {
+    // Weight DINO (344MB) at 85% of total download size, FaceNet (92MB) at 15%
+    const combined = (progressDino * 0.85) + (progressFacenet * 0.15);
+    const display = Math.round(combined * 80); // Leave last 20% for WebGPU compilation
     loadingBar.style.width = display + '%';
-    loadingText.textContent = `Downloading FaceNet & MediaPipe... ${display}%`;
+    loadingText.textContent = `Downloading AI Models... ${display}%`;
 }
 
-// 1. Concurrently fetch FaceNet, MediaPipe, and trigger DINO creation from Hugging Face URL
-const dinoUrl = 'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx';
-
-const [facenetBuffer, vision] = await Promise.all([
+// 1. Concurrent downloads of inline files
+const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
+    fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx',
+        (pct) => { progressDino = pct; updateCombinedProgress(); }
+    ),
     fetchWithProgress(
         'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
-        (pct) => updateProgress(pct)
+        (pct) => { progressFacenet = pct; updateCombinedProgress(); }
     ),
     FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
 ]);
 
-loadingText.textContent = 'Initializing AI engines & downloading DINO from Hugging Face...';
-loadingBar.style.width = '75%';
+loadingText.textContent = 'Initializing AI Sessions...';
+loadingBar.style.width = '85%';
 
-// 2. ONNX Runtime handles fetching DINO + DINO.data directly from HF natively
+// 2. Initialize sessions (Single-file models will not trigger external .data WASM crashes)
 const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
-    InferenceSession.create(dinoUrl, {
-        executionProviders: ['webgpu', 'wasm']
-    }),
-    InferenceSession.create(facenetBuffer, {
-        executionProviders: ['webgpu', 'wasm']
-    }),
+    InferenceSession.create(dinoBuffer, { executionProviders: ['webgpu', 'wasm'] }),
+    InferenceSession.create(facenetBuffer, { executionProviders: ['webgpu', 'wasm'] }),
     FaceDetector.createFromOptions(vision, {
         baseOptions: { 
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' 
