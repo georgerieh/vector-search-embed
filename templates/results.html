@@ -56,6 +56,7 @@ async function fetchWithProgress(url, onProgress) {
 loadingText.textContent = 'Downloading Models... 0%';
 loadingBar.style.width = '0%';
 
+let progressDino = 0;
 let progressFacenet = 0;
 
 function updateCombinedProgress() {
