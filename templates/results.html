@@ -22,10 +22,10 @@
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
     
-    async function fetchWithProgress(url, onProgress) {
-    const response = await fetch(url)
+   async function fetchWithProgress(url, onProgress) {
+    const response = await fetch(url);
     const contentLength = response.headers.get('Content-Length');
-    const total = contentLength ? parseInt(contentLength) : null;
+    const total = contentLength ? parseInt(contentLength, 10) : null;
     const reader = response.body.getReader();
     const chunks = [];
     let received = 0;
@@ -38,7 +38,6 @@
         if (total) onProgress(received / total);
     }
 
-    // reassemble
     const buffer = new Uint8Array(received);
     let offset = 0;
     for (const chunk of chunks) {
@@ -51,12 +50,13 @@
 loadingText.textContent = 'Downloading Models... 0%';
 loadingBar.style.width = '0%';
 
-// 1. Track progress for each file independently
+// Track individual progress values
 let progressDino = 0;
 let progressDinoData = 0;
 let progressFacenet = 0;
 
 function updateCombinedProgress() {
+    // Allocation breakdown: DINO Model (20%), DINO Weights (25%), FaceNet (45%) -> 90% total download
     const totalDisplay = Math.round(
         (progressDino * 20) + 
         (progressDinoData * 25) + 
@@ -65,6 +65,8 @@ function updateCombinedProgress() {
     loadingBar.style.width = totalDisplay + '%';
     loadingText.textContent = `Downloading Models... ${totalDisplay}%`;
     }
+    
+    // 1. Download all model buffers concurrently with progress tracking
     const [dinoBuffer, dinoDataBuffer, facenetBuffer, vision] = await Promise.all([
         fetchWithProgress(
             'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
@@ -78,23 +80,20 @@ function updateCombinedProgress() {
             'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
             (pct) => { progressFacenet = pct; updateCombinedProgress(); }
         ),
-        // We can also start downloading the MediaPipe WebAssembly files at the same time
         FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
     ]);
     
-    loadingText.textContent = 'Initializing AI engines in WebGPU... (this may take a moment)';
+    loadingText.textContent = 'Initializing AI engines... (this may take a moment)';
     loadingBar.style.width = '95%';
     
-    // 3. Initialize all inference sessions concurrently
-    let dinoSession, faceNetSession, faceDetector;
-    
-    [dinoSession, faceNetSession, faceDetector] = await Promise.all([
+    // 2. Pass external data buffer directly into InferenceSession options & initialize sessions in parallel
+    const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
         InferenceSession.create(dinoBuffer, {
             executionProviders: ['webgpu', 'wasm'],
             externalData: [
                 {
-                    data: new Uint8Array(dinoDataBuffer),
-                    path: 'dinov2_vitb14.onnx.data'
+                    path: 'dinov2_vitb14.onnx.data',
+                    data: new Uint8Array(dinoDataBuffer)
                 }
             ]
         }),
@@ -102,7 +101,9 @@ function updateCombinedProgress() {
             executionProviders: ['webgpu', 'wasm'],
         }),
         FaceDetector.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' },
+            baseOptions: { 
+                modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' 
+            },
             runningMode: 'IMAGE',
             minDetectionConfidence: 0.9,
         })
@@ -117,7 +118,6 @@ function updateCombinedProgress() {
         loadingText.textContent = '';
         document.getElementById('loading-container').style.display = 'none';
     }, 2000);
-
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
         canvas.width = 224; canvas.height = 224;
