@@ -2262,7 +2262,7 @@ function buildGallery(images, startIndex) {
         const url = img.url.replace(/^\//, '');
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
-        photo.style.backgroundImage = `url('/thumbnail/${url}')`;
+        photo.style.backgroundImage = `url('/files/${url}')`;
         main.insertBefore(photo, main.querySelector('.gallery-controls'));
 
         const thumb = document.createElement('div');
