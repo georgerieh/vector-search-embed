@@ -15,17 +15,14 @@
 
     <script type="module">
     import { InferenceSession, Tensor, env } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
-    import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
-    
-    const loadingBar = document.getElementById('loading-bar');
-    const loadingText = document.getElementById('loading-text');
-    const btn = document.querySelector('button[name="forwardBtn"]');
-    btn.disabled = true;
-    
-    // 1. Disable WASM Web Worker proxy so externalData buffer can be mounted in memory on the main thread
-    env.wasm.proxy = false;
-    
-   async function fetchWithProgress(url, onProgress) {
+import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
+
+const loadingBar = document.getElementById('loading-bar');
+const loadingText = document.getElementById('loading-text');
+const btn = document.querySelector('button[name="forwardBtn"]');
+btn.disabled = true;
+
+async function fetchWithProgress(url, onProgress) {
     const response = await fetch(url);
     const contentLength = response.headers.get('Content-Length');
     const total = contentLength ? parseInt(contentLength, 10) : null;
@@ -53,73 +50,56 @@
 loadingText.textContent = 'Downloading Models... 0%';
 loadingBar.style.width = '0%';
 
-// Track individual progress values
-let progressDino = 0;
-let progressDinoData = 0;
 let progressFacenet = 0;
 
-function updateCombinedProgress() {
-    // Allocation breakdown: DINO Model (20%), DINO Weights (25%), FaceNet (45%) -> 90% total download
-    const totalDisplay = Math.round(
-        (progressDino * 20) + 
-        (progressDinoData * 25) + 
-        (progressFacenet * 45)
-    );
-    loadingBar.style.width = totalDisplay + '%';
-    loadingText.textContent = `Downloading Models... ${totalDisplay}%`;
-    }
-    
-    // 1. Download all model buffers concurrently with progress tracking
-    const [dinoBuffer, dinoDataBuffer, facenetBuffer, vision] = await Promise.all([
-    fetchWithProgress(
-        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
-        (pct) => { progressDino = pct; updateCombinedProgress(); }
-    ),
-    fetchWithProgress(
-        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
-        (pct) => { progressDinoData = pct; updateCombinedProgress(); }
-    ),
+function updateProgress(facenetPct) {
+    // FaceNet takes up to 70% of loading bar; remaining 30% for session compilation
+    const display = Math.round(facenetPct * 70);
+    loadingBar.style.width = display + '%';
+    loadingText.textContent = `Downloading FaceNet & MediaPipe... ${display}%`;
+}
+
+// 1. Concurrently fetch FaceNet, MediaPipe, and trigger DINO creation from Hugging Face URL
+const dinoUrl = 'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx';
+
+const [facenetBuffer, vision] = await Promise.all([
     fetchWithProgress(
         'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
-        (pct) => { progressFacenet = pct; updateCombinedProgress(); }
+        (pct) => updateProgress(pct)
     ),
     FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
-    ]);
-    
-    loadingText.textContent = 'Initializing AI engines...';
-    loadingBar.style.width = '95%';
-    
-    const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
-        InferenceSession.create(dinoBuffer, {
-            executionProviders: ['webgpu', 'wasm'],
-            externalData: [
-                {
-                    path: 'dinov2_vitb14.onnx.data',
-                    data: new Uint8Array(dinoDataBuffer)
-                }
-            ]
-        }),
-        InferenceSession.create(facenetBuffer, {
-            executionProviders: ['webgpu', 'wasm'],
-        }),
-        FaceDetector.createFromOptions(vision, {
-            baseOptions: { 
-                modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' 
-            },
-            runningMode: 'IMAGE',
-            minDetectionConfidence: 0.9,
-        })
-    ]);
-    
-    loadingBar.style.width = '100%';
-    loadingText.textContent = '✓ Ready — upload a photo to search';
-    btn.disabled = false;
-    
-    setTimeout(() => {
-        loadingBar.style.width = '0%';
-        loadingText.textContent = '';
-        document.getElementById('loading-container').style.display = 'none';
-    }, 2000);
+]);
+
+loadingText.textContent = 'Initializing AI engines & downloading DINO from Hugging Face...';
+loadingBar.style.width = '75%';
+
+// 2. ONNX Runtime handles fetching DINO + DINO.data directly from HF natively
+const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
+    InferenceSession.create(dinoUrl, {
+        executionProviders: ['webgpu', 'wasm']
+    }),
+    InferenceSession.create(facenetBuffer, {
+        executionProviders: ['webgpu', 'wasm']
+    }),
+    FaceDetector.createFromOptions(vision, {
+        baseOptions: { 
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' 
+        },
+        runningMode: 'IMAGE',
+        minDetectionConfidence: 0.9,
+    })
+]);
+
+loadingBar.style.width = '100%';
+loadingText.textContent = '✓ Ready — upload a photo to search';
+btn.disabled = false;
+
+setTimeout(() => {
+    loadingBar.style.width = '0%';
+    loadingText.textContent = '';
+    document.getElementById('loading-container').style.display = 'none';
+}, 2000);
+        
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
         canvas.width = 224; canvas.height = 224;
