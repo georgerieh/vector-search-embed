@@ -1342,59 +1342,59 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
     </div>
 </div>
 <div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7; min-width:0;">
-            <div id="info-tab">
-    <div class="info-header">
-        <span class="info-title">Your Library</span>
-        <span class="total-badge" id="total-badge">...</span>
-        <div class="info-subtitle">A look at your photo collection</div>
-    </div>
- 
-    <div id="info-loading" class="loading-state">
-        <div class="spinner"></div>
-        Loading stats...
-    </div>
- 
-    <div id="info-content" style="display:none">
- 
-        <!-- Monthly bar chart -->
-        <div class="card">
-            <div class="card-title">Photos by Month</div>
-            <div class="chart-wrap">
-                <div class="chart-inner" id="month-chart"></div>
-                <div class="chart-axis"></div>
-            </div>
+    <div id="info-tab">
+        <div class="info-header">
+            <span class="info-title">Your Library</span>
+            <span class="total-badge" id="total-badge">...</span>
+            <div class="info-subtitle">A look at your photo collection</div>
         </div>
- 
-        <!-- Day of week -->
-        <div class="card">
-            <div class="card-title">Most Active Day of Week</div>
-            <div class="dow-chart" id="dow-chart"></div>
+
+        <div id="info-loading" class="loading-state">
+            <div class="spinner"></div>
+            Loading stats...
         </div>
- 
-        <!-- 4 mini tables -->
-        <div class="tables-row">
-            <div class="mini-card">
-                <div class="mini-title">Top Cities</div>
-                <table class="mini-table" id="top-cities-table"></table>
+
+        <div id="info-content" style="display:none">
+
+            <!-- Monthly bar chart -->
+            <div class="card">
+                <div class="card-title">Photos by Month</div>
+                <div class="chart-wrap">
+                    <div class="chart-inner" id="month-chart"></div>
+                    <div class="chart-axis"></div>
+                </div>
             </div>
-            <div class="mini-card">
-                <div class="mini-title">Top Countries</div>
-                <table class="mini-table" id="top-countries-table"></table>
+
+            <!-- Day of week -->
+            <div class="card">
+                <div class="card-title">Most Active Day of Week</div>
+                <div class="dow-chart" id="dow-chart"></div>
             </div>
-            <div class="mini-card">
-                <div class="mini-title">Least Visited Cities</div>
-                <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
-                <table class="mini-table" id="bottom-cities-table"></table>
-            </div>
-            <div class="mini-card">
-                <div class="mini-title">Least Visited Countries</div>
-                <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
-                <table class="mini-table" id="bottom-countries-table"></table>
-            </div>
-        </div>
- 
+
+            <!-- 4 mini tables -->
+            <div class="tables-row">
+                <div class="mini-card">
+                    <div class="mini-title">Top Cities</div>
+                    <table class="mini-table" id="top-cities-table"></table>
+                </div>
+                <div class="mini-card">
+                    <div class="mini-title">Top Countries</div>
+                    <table class="mini-table" id="top-countries-table"></table>
+                </div>
+                <div class="mini-card">
+                    <div class="mini-title">Least Visited Cities</div>
+                    <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
+                    <table class="mini-table" id="bottom-cities-table"></table>
+                </div>
+                <div class="mini-card">
+                    <div class="mini-title">Least Visited Countries</div>
+                    <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
+                    <table class="mini-table" id="bottom-countries-table"></table>
+                </div>
+            </div> 
+        </div> 
     </div>
-</div>
+</div> 
  
 <script>
 
@@ -1680,11 +1680,11 @@ window.setView = function(view) {
     document.getElementById('memory-pane').style.display   = view === 'memory' ? 'flex' : 'none';
     document.getElementById('review-pane').style.display   = view === 'review' ? 'flex' : 'none';
     document.querySelector('.sidebar').style.display = ['gallery', 'memory', 'info'].includes(view) ? 'none' : '';
-    // document.querySelector('.main').style.marginLeft = view === 'info' ? '0' : '260px';
+    document.querySelector('.main').style.marginLeft = ['gallery', 'memory', 'info'].includes(view) ? '0' : '260px';
 
     if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 0);
     if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
-    // if (view === 'info') { document.getElementById('info-pane').scrollTop = 0; }
+    if (view === 'info') { document.getElementById('info-pane').scrollTop = 0; }
     if (view === 'memory') loadMemory();
     if (view === 'review' && !document.getElementById('review-grid').children.length) loadReviewBatch();
 }
