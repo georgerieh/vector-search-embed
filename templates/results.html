@@ -2252,18 +2252,26 @@ function buildGallery(images, startIndex) {
     strip.innerHTML = '';
     galleryIndex = startIndex;
 
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+
     images.forEach((img, i) => {
         const url = img.url.replace(/^\//, '');
+        
+        const ext = url.substring(url.lastIndexOf('.')).toLowerCase();
+        const isVideo = img.is_video || img.type === 'video' || videoExtensions.includes(ext);
+
+        const mainSrc = isVideo ? `/thumbnail/${url}` : `/files/${url}`;
+
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
-        photo.style.backgroundImage = `url('/files/${url}')`;
+        photo.style.backgroundImage = `url('${mainSrc}')`;
         main.insertBefore(photo, main.querySelector('.gallery-controls'));
 
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
         thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
         photo.style.cursor = 'pointer';
-        photo.addEventListener('click', () => window.openLightbox(images, i));
+        // photo.addEventListener('click', () => window.openLightbox(images, i));
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
@@ -2345,9 +2353,6 @@ async function renderSavedCollections() {
     if (!list) return;
     list.innerHTML = '';
 
-    // ========================================================
-    // 1. RENDER THE ACTIVE "CURRENT MEMORY" SUB-MODULE BOX
-    // ========================================================
     if (currentMemory && currentMemory.photos && currentMemory.photos.length > 0) {
         const el = document.createElement('div');
         el.style.cssText = 'background:#f0f7ff;border:1px solid rgba(0,122,255,0.2);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);cursor:pointer;transition:background 0.15s;margin-bottom:12px;';
