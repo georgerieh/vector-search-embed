@@ -1061,8 +1061,6 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
     </script>
 </head>
 <body>
-
-<!-- SIDEBAR -->
 <div class="sidebar">
     <div class="sidebar-header">
         <div class="sidebar-title">Memories</div>
@@ -1083,53 +1081,46 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
                 </div>
             </div>
             <div class="field-group">
-    <span class="field-label">Country</span>
-    <input class="field-input" id="country-filter" placeholder="e.g. FR, RU..." list="country-list">
-    <datalist id="country-list"></datalist>
-</div>
-<div class="field-group">
-    <span class="field-label">City</span>
-    <input class="field-input" id="city-filter" placeholder="e.g. Paris..." list="city-list">
-    <datalist id="city-list"></datalist>
-</div>
-<div class="field-group">
-    <span class="field-label">H3 Cell</span>
-    <input class="field-input" id="h3-filter" placeholder="H3 hex ID...">
-</div>
-<div class="field-group">
-    <span class="field-label">Search by face</span>
-    <div id="face-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
-    <div id="no-faces-msg" style="font-size:11px;color:#8e8e93;">No saved faces yet</div>
-</div>
-<div class="field-group" style="margin-top: 4px;">
-    <div id="btn-open-face-upload" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#f2f2f7;border-radius:10px;font-size:13px;color:#3c3c43;cursor:pointer;transition:background 0.15s;user-select:none;">
-        <span style="display:flex;align-items:center;gap:8px;"> Add new face</span>
-        <span style="color:#8e8e93;font-weight:bold;">➔</span>
-    </div>
-</div>
+                <span class="field-label">Country</span>
+                <input class="field-input" id="country-filter" placeholder="e.g. FR, RU..." list="country-list">
+                <datalist id="country-list"></datalist>
+            </div>
+            <div class="field-group">
+                <span class="field-label">City</span>
+                <input class="field-input" id="city-filter" placeholder="e.g. Paris..." list="city-list">
+                <datalist id="city-list"></datalist>
+            </div>
+            <div class="field-group">
+                <span class="field-label">H3 Cell</span>
+                <input class="field-input" id="h3-filter" placeholder="H3 hex ID...">
+            </div>
+            <div class="field-group">
+                <span class="field-label">Search by face</span>
+                <div id="face-selector" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
+                <div id="no-faces-msg" style="font-size:11px;color:#8e8e93;">No saved faces yet</div>
+            </div>
+            <div class="field-group" style="margin-top: 4px;">
+                <div id="btn-open-face-upload" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#f2f2f7;border-radius:10px;font-size:13px;color:#3c3c43;cursor:pointer;transition:background 0.15s;user-select:none;">
+                    <span style="display:flex;align-items:center;gap:8px;"> Add new face</span>
+                    <span style="color:#8e8e93;font-weight:bold;">➔</span>
+                </div>
+            </div>
             <input class="field-input" id="limit" name="limit" placeholder="Max results (50)" type="text">
-             <button type="button" id="clear-btn" class="search-btn" style="background:#f2f2f7;color:#3c3c43;">Clear</button>
+            <button type="button" id="clear-btn" class="search-btn" style="background:#f2f2f7;color:#3c3c43;">Clear</button>
             <button class="search-btn" name="forwardBtn" type="submit">Search</button>
-           
         </form>
         <div id="ref-preview" style="display:none; margin-top:4px;">
-        <img id="ref-img" style="
-            width: 100%;
-            aspect-ratio: 1;
-            object-fit: cover;
-            border-radius: 10px;
-            border: 1px solid rgba(0,0,0,0.08);
-        ">
-        <div id="ref-label" style="font-size:11px;color:#8e8e93;margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-</div>
+            <img id="ref-img" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; border: 1px solid rgba(0,0,0,0.08);">
+            <div id="ref-label" style="font-size:11px;color:#8e8e93;margin-top:5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        </div>
     </div>
 
     <div class="sidebar-stats">
         <span id="result-count">No results yet</span>
         <span>{{ gen_time }}s · {{ query_time }}s</span>
-         <button onclick="window.deleteSelectedPhotos()" class="toolbar-danger-btn">
-                ✕ Delete Selected
-            </button>
+        <button onclick="window.deleteSelectedPhotos()" class="toolbar-danger-btn">
+            ✕ Delete Selected
+        </button>
     </div>
 
     <div class="sidebar-section">
@@ -1137,21 +1128,15 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         <div class="fav-strip" id="fav-strip"></div>
     </div>
     <div class="sidebar-section" style="border-top:1px solid rgba(0,0,0,0.07);">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div class="section-title" style="margin:0">Albums</div>
-        <button id="new-album-btn" style="
-            border:none;background:#007aff;color:white;
-            border-radius:50%;width:22px;height:22px;
-            font-size:16px;line-height:1;cursor:pointer;
-            display:flex;align-items:center;justify-content:center;
-        ">+</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div class="section-title" style="margin:0">Albums</div>
+            <button id="new-album-btn" style="border:none;background:#007aff;color:white;border-radius:50%;width:22px;height:22px;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+        </div>
+        <div id="album-list" style="display:flex;flex-direction:column;gap:4px;"></div>
     </div>
-    <div id="album-list" style="display:flex;flex-direction:column;gap:4px;"></div>
-</div>
-    
 </div>
 
-<!-- MAIN -->
+<!-- MAIN CONTAINER -->
 <div class="main">
     <div class="toolbar">
         <div class="view-toggle">
@@ -1164,26 +1149,27 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         <div class="toolbar-spacer"></div>
         <div class="toolbar-info" id="toolbar-info"></div>
     </div>
+
     <div class="content-split" id="results-area">
-    <div class="grid-pane">
-        <div id="empty-state" style="display:flex;">
-            <div class="empty-icon"></div>
-            <div class="empty-text">Find your memories</div>
-            <div class="empty-sub">Search by photo similarity or date range</div>
+        <div class="grid-pane">
+            <div id="empty-state" style="display:flex;">
+                <div class="empty-icon"></div>
+                <div class="empty-text">Find your memories</div>
+                <div class="empty-sub">Search by photo similarity or date range</div>
+            </div>
+            <div id="grid-select-toolbar" style="display:none;align-items:center;gap:10px;padding:8px 0;margin-bottom:6px;">
+                <span id="grid-select-count" style="font-size:13px;color:#3c3c43;font-weight:500;"></span>
+                <button id="grid-deselect-all" style="border:none;background:#f2f2f7;color:#3c3c43;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Deselect all</button>
+                <button id="grid-fav-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">♥ Favorite</button>
+                <button id="grid-delete-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✕ Delete</button>
+            </div>
+            <div id="photo-grid"></div>
         </div>
-        <div id="grid-select-toolbar" style="display:none;align-items:center;gap:10px;padding:8px 0;margin-bottom:6px;">
-    <span id="grid-select-count" style="font-size:13px;color:#3c3c43;font-weight:500;"></span>
-    <button id="grid-deselect-all" style="border:none;background:#f2f2f7;color:#3c3c43;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Deselect all</button>
-    <button id="grid-fav-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">♥ Favorite</button>
-    <button id="grid-delete-selected" style="border:none;background:#ff3b30;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">✕ Delete</button>
+        <div class="map-pane" id="map-pane">
+            <div class="resize-handle" id="resize-handle"></div>
+            <div id="map"></div>
         </div>
-        <div id="photo-grid"></div>
     </div>
-    <div class="map-pane" id="map-pane">
-        <div class="resize-handle" id="resize-handle"></div>
-        <div id="map"></div>
-    </div>
-</div>
 
     <div class="gallery-pane" id="gallery-pane">
         <div class="gallery-main" id="gallery-main">
@@ -1194,207 +1180,110 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         </div>
         <div class="gallery-strip" id="gallery-strip"></div>
     </div>
+
     <div id="memory-pane" style="display:none; flex:1; overflow:hidden; background:#f2f2f7; flex-direction:row;">
-
-    <!-- collections sidebar -->
-    <div id="collections-pane" style="
-        width:260px;
-        min-width:200px;
-        flex-shrink:0;
-        border-right:1px solid rgba(0,0,0,0.08);
-        background:white;
-        display:flex;
-        flex-direction:column;
-        overflow:hidden;
-    ">
-        <div style="padding:14px 16px;border-bottom:1px solid rgba(0,0,0,0.07);font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.05em;">
-            Saved Collections
+        <!-- collections sidebar -->
+        <div id="collections-pane" style="width:260px; min-width:200px; flex-shrink:0; border-right:1px solid rgba(0,0,0,0.08); background:white; display:flex; flex-direction:column; overflow:hidden;">
+            <div style="padding:14px 16px;border-bottom:1px solid rgba(0,0,0,0.07);font-size:11px;font-weight:600;color:#8e8e93;text-transform:uppercase;letter-spacing:0.05em;">
+                Saved Collections
+            </div>
+            <div id="saved-collections-list" style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px;"></div>
         </div>
-        <div id="saved-collections-list" style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px;"></div>
+
+        <!-- memory content -->
+        <div style="flex:1;overflow-y:auto;">
+            <div id="memory-loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#8e8e93; gap:12px;">
+                <div class="spinner"></div>
+                <div style="font-size:14px">Finding a memory...</div>
+            </div>
+
+            <div id="memory-content" style="display:none; padding:24px;">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                    <div>
+                        <div id="memory-title" style="font-size:26px; font-weight:700; letter-spacing:-0.6px;"></div>
+                        <div id="memory-subtitle" style="font-size:13px; color:#8e8e93; margin-top:4px;"></div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button id="memory-save-btn" style="padding:9px 18px; background:#007aff; color:white; border:none; border-radius:10px; font-size:13px; font-weight:600; font-family:inherit; cursor:pointer;">♥ Save Collection</button>
+                        <button id="memory-delete-btn" style="padding:9px 18px; background:#ff3b30; color:white; border:none; border-radius:10px; font-size:13px; font-weight:600; font-family:inherit; cursor:pointer;">✕ Dismiss</button>
+                        <button id="memory-refresh-btn" style="padding:9px 18px; background:white; color:#007aff; border:1px solid rgba(0,122,255,0.3); border-radius:10px; font-size:13px; font-weight:600; font-family:inherit; cursor:pointer;">↻ New Memory</button>
+                        <button id="memory-today-btn" style="padding:9px 18px; background:white; color:#007aff; border:1px solid rgba(0,122,255,0.3); border-radius:10px; font-size:13px; font-weight:600; font-family:inherit; cursor:pointer;">Today</button>
+                    </div>
+                </div>
+
+                <div id="memory-hero" style="width:100%; height:280px; border-radius:16px; background-size:cover; background-position:center; margin-bottom:16px; box-shadow:0 8px 32px rgba(0,0,0,0.12); cursor:pointer;"></div>
+                <div id="memory-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(120px,1fr)); gap:3px; margin-bottom:20px;"></div>
+            </div>
+        </div>
     </div>
 
-    <!-- memory content -->
-    <div style="flex:1;overflow-y:auto;">
-
-
-    <div id="memory-loading" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#8e8e93; gap:12px;">
-        <div class="spinner"></div>
-        <div style="font-size:14px">Finding a memory...</div>
-    </div>
-
-    <div id="memory-content" style="display:none; padding:24px;">
-        <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+    <div id="review-pane" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:#f2f2f7;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(255,255,255,0.88);border-bottom:1px solid rgba(0,0,0,0.08);">
             <div>
-                <div id="memory-title" style="font-size:26px; font-weight:700; letter-spacing:-0.6px;"></div>
-                <div id="memory-subtitle" style="font-size:13px; color:#8e8e93; margin-top:4px;"></div>
+                <span style="font-size:17px;font-weight:600;">Review</span>
+                <span id="review-progress" style="font-size:12px;color:#8e8e93;margin-left:10px;"></span>
             </div>
-            <div style="display:flex; gap:8px;">
-                <button id="memory-save-btn" style="
-                    padding:9px 18px;
-                    background:#007aff;
-                    color:white;
-                    border:none;
-                    border-radius:10px;
-                    font-size:13px;
-                    font-weight:600;
-                    font-family:inherit;
-                    cursor:pointer;
-                    transition:background 0.15s;
-                ">♥ Save Collection</button>
-                <button id="memory-delete-btn" style="
-                    padding:9px 18px;
-                    background:#ff3b30;
-                    color:white;
-                    border:none;
-                    border-radius:10px;
-                    font-size:13px;
-                    font-weight:600;
-                    font-family:inherit;
-                    cursor:pointer;
-                    transition:background 0.15s;
-                ">✕ Dismiss</button>
-                <button id="memory-refresh-btn" style="
-                    padding:9px 18px;
-                    background:white;
-                    color:#007aff;
-                    border:1px solid rgba(0,122,255,0.3);
-                    border-radius:10px;
-                    font-size:13px;
-                    font-weight:600;
-                    font-family:inherit;
-                    cursor:pointer;
-                    transition:background 0.15s;
-                ">↻ New Memory</button>
-                <button id="memory-today-btn" style="
-                    padding:9px 18px;
-                    background:white;
-                    color:#007aff;
-                    border:1px solid rgba(0,122,255,0.3);
-                    border-radius:10px;
-                    font-size:13px;
-                    font-weight:600;
-                    font-family:inherit;
-                    cursor:pointer;
-                ">Today</button>
-            </div>
+            <button id="review-next-btn" style="padding:8px 18px;background:#007aff;color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Next batch →</button>
         </div>
-
-
-        <!-- hero photo -->
-        <div id="memory-hero" style="
-            width:100%;
-            height:280px;
-            border-radius:16px;
-            background-size:cover;
-            background-position:center;
-            margin-bottom:16px;
-            box-shadow:0 8px 32px rgba(0,0,0,0.12);
-            cursor:pointer;
-        "></div>
-
-        <!-- photo grid -->
-        <div id="memory-grid" style="
-            display:grid;
-            grid-template-columns:repeat(auto-fill, minmax(120px,1fr));
-            gap:3px;
-            margin-bottom:20px;
-        "></div>
-
+        <div id="review-grid" style="flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:3px;align-content:start;"></div>
+        <div id="review-exhausted" style="display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#8e8e93;">
+            <div style="font-size:48px;">🎉</div>
+            <div style="font-size:17px;font-weight:500;color:#3c3c43;">All photos reviewed!</div>
+            <button id="review-reset-btn" style="margin-top:8px;padding:9px 20px;background:#007aff;color:white;border:none;border-radius:10px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Start over</button>
+        </div>
     </div>
-</div>
-</div> <!-- end memory content wrapper -->
-</div> <!-- end memory-pane -->
-<div id="review-pane" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:#f2f2f7;">
-    <div style="
-        display:flex;align-items:center;justify-content:space-between;
-        padding:12px 16px;
-        background:rgba(255,255,255,0.88);
-        border-bottom:1px solid rgba(0,0,0,0.08);
-    ">
-        <div>
-            <span style="font-size:17px;font-weight:600;">Review</span>
-            <span id="review-progress" style="font-size:12px;color:#8e8e93;margin-left:10px;"></span>
-        </div>
-        <button id="review-next-btn" style="
-            padding:8px 18px;background:#007aff;color:white;
-            border:none;border-radius:10px;font-size:13px;
-            font-weight:600;font-family:inherit;cursor:pointer;
-        ">Next batch →</button>
-    </div>
-    <div id="review-grid" style="
-        flex:1;overflow-y:auto;padding:12px;
-        display:grid;
-        grid-template-columns:repeat(auto-fill,minmax(130px,1fr));
-        gap:3px;
-        align-content:start;
-    "></div>
-    <div id="review-exhausted" style="
-        display:none;flex:1;align-items:center;justify-content:center;
-        flex-direction:column;gap:10px;color:#8e8e93;
-    ">
-        <div style="font-size:48px;">🎉</div>
-        <div style="font-size:17px;font-weight:500;color:#3c3c43;">All photos reviewed!</div>
-        <button id="review-reset-btn" style="
-            margin-top:8px;padding:9px 20px;background:#007aff;color:white;
-            border:none;border-radius:10px;font-size:13px;font-weight:600;
-            font-family:inherit;cursor:pointer;
-        ">Start over</button>
-    </div>
-<div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7; min-width:0;">
-    <div id="info-tab">
-        <div class="info-header">
-            <span class="info-title">Your Library</span>
-            <span class="total-badge" id="total-badge">...</span>
-            <div class="info-subtitle">A look at your photo collection</div>
-        </div>
 
-        <div id="info-loading" class="loading-state">
-            <div class="spinner"></div>
-            Loading stats...
-        </div>
-
-        <div id="info-content" style="display:none">
-
-            <!-- Monthly bar chart -->
-            <div class="card">
-                <div class="card-title">Photos by Month</div>
-                <div class="chart-wrap">
-                    <div class="chart-inner" id="month-chart"></div>
-                    <div class="chart-axis"></div>
-                </div>
+    <div id="info-pane" style="display:none; flex:1; overflow-y:auto; padding:24px; background:#f2f2f7; min-width:0;">
+        <div id="info-tab">
+            <div class="info-header">
+                <span class="info-title">Your Library</span>
+                <span class="total-badge" id="total-badge">...</span>
+                <div class="info-subtitle">A look at your photo collection</div>
             </div>
 
-            <!-- Day of week -->
-            <div class="card">
-                <div class="card-title">Most Active Day of Week</div>
-                <div class="dow-chart" id="dow-chart"></div>
+            <div id="info-loading" class="loading-state">
+                <div class="spinner"></div>
+                Loading stats...
             </div>
 
-            <!-- 4 mini tables -->
-            <div class="tables-row">
-                <div class="mini-card">
-                    <div class="mini-title">Top Cities</div>
-                    <table class="mini-table" id="top-cities-table"></table>
+            <div id="info-content" style="display:none">
+                <div class="card">
+                    <div class="card-title">Photos by Month</div>
+                    <div class="chart-wrap">
+                        <div class="chart-inner" id="month-chart"></div>
+                        <div class="chart-axis"></div>
+                    </div>
                 </div>
-                <div class="mini-card">
-                    <div class="mini-title">Top Countries</div>
-                    <table class="mini-table" id="top-countries-table"></table>
+
+                <div class="card">
+                    <div class="card-title">Most Active Day of Week</div>
+                    <div class="dow-chart" id="dow-chart"></div>
                 </div>
-                <div class="mini-card">
-                    <div class="mini-title">Least Visited Cities</div>
-                    <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
-                    <table class="mini-table" id="bottom-cities-table"></table>
-                </div>
-                <div class="mini-card">
-                    <div class="mini-title">Least Visited Countries</div>
-                    <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
-                    <table class="mini-table" id="bottom-countries-table"></table>
-                </div>
+
+                <div class="tables-row">
+                    <div class="mini-card">
+                        <div class="mini-title">Top Cities</div>
+                        <table class="mini-table" id="top-cities-table"></table>
+                    </div>
+                    <div class="mini-card">
+                        <div class="mini-title">Top Countries</div>
+                        <table class="mini-table" id="top-countries-table"></table>
+                    </div>
+                    <div class="mini-card">
+                        <div class="mini-title">Least Visited Cities</div>
+                        <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
+                        <table class="mini-table" id="bottom-cities-table"></table>
+                    </div>
+                    <div class="mini-card">
+                        <div class="mini-title">Least Visited Countries</div>
+                        <div style="font-size:10px;color:#c7c7cc;margin-bottom:6px;">100+ photos</div>
+                        <table class="mini-table" id="bottom-countries-table"></table>
+                    </div>
+                </div> 
             </div> 
         </div> 
     </div>
 </div> 
-</div>
 <script>
 
 document.getElementById('memory-today-btn').addEventListener('click', async () => {
