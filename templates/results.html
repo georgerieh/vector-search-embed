@@ -1717,7 +1717,7 @@ function buildGallery(images, startIndex) {
         thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
         photo.style.cursor = 'pointer';
         // photo.addEventListener('click', () => window.openLightbox(images, i));
-        photo.addEventListener('click', () => window.open(`url('/files/${url}')`, '_blank').focus())
+        photo.addEventListener('click', () => window.open(`/files/${url}'`, '_blank').focus())
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
