@@ -9,131 +9,103 @@
     <link href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" rel="stylesheet"/>
     <link href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" rel="stylesheet"/>
     <script src="https://unpkg.com/h3-js@4/dist/h3-js.umd.js"></script>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
 
     <script type="module">
-    import { InferenceSession, Tensor } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
-    import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
+    import { InferenceSession, Tensor, env } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
+import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
+
+const loadingBar = document.getElementById('loading-bar');
+const loadingText = document.getElementById('loading-text');
+const btn = document.querySelector('button[name="forwardBtn"]');
+btn.disabled = true;
+
+async function fetchWithProgress(url, onProgress) {
+    // 1. Explicitly follow redirects from HF to CDN
+    const response = await fetch(url, { redirect: 'follow' });
     
-    const loadingBar = document.getElementById('loading-bar');
-    const loadingText = document.getElementById('loading-text');
-    const btn = document.querySelector('button[name="forwardBtn"]');
-    btn.disabled = true;
-    let dinoSession = null;
-    function renderFavStrip() {
-        const strip = document.getElementById('fav-strip');
-        strip.innerHTML = '';
-        const favs = getFavorites();
-        if (favs.length === 0) {
-            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
-            return;
-        }
-        favs.forEach(url => {
-            const el = document.createElement('div');
-            el.className = 'fav-thumb';
-            el.style.backgroundImage = `url('/thumbnail/${url}')`;
-            el.title = url.split('/').pop();
-            el.addEventListener('click', () => {
-                const allFavs = getFavorites().map(u => ({ url: u, score: 0, lat: null, lon: null, location: null }));
-                const i = allFavs.findIndex(img => img.url === url);
-                openLightbox(allFavs, i >= 0 ? i : 0);
-            });
-            strip.appendChild(el);
-        });
+    if (!response.ok) {
+        throw new Error(`Failed to download ${url}: ${response.statusText}`);
     }
-    window.renderFavStrip = renderFavStrip;
-    async function fetchWithProgress(url, onProgress) {
-        const response = await fetch(url)
-        const contentLength = response.headers.get('Content-Length');
-        const total = contentLength ? parseInt(contentLength) : null;
-        const reader = response.body.getReader();
-        const chunks = [];
-        let received = 0;
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.byteLength;
-            if (total) onProgress(received / total);
-        }
 
-        // reassemble
-        const buffer = new Uint8Array(received);
-        let offset = 0;
-        for (const chunk of chunks) {
-            buffer.set(chunk, offset);
-            offset += chunk.byteLength;
-        }
-        return buffer.buffer;
+    const contentLength = response.headers.get('Content-Length');
+    const total = contentLength ? parseInt(contentLength, 10) : null;
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        if (total) onProgress(received / total);
     }
-    loadingText.textContent = 'Loading DINO...';
-    loadingBar.style.width = '0%';
 
-    const dinoBuffer = await fetchWithProgress(
-    'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx',
-    (pct) => {
-        const display = Math.round(pct * 20); // 0–20% allocation
-        loadingBar.style.width = display + '%';
-        loadingText.textContent = `Loading DINO Graph... ${display}%`;
+    const buffer = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+        buffer.set(chunk, offset);
+        offset += chunk.byteLength;
     }
-    );
+    return buffer.buffer;
+}
 
-    loadingText.textContent = 'Loading DINO Weights...';
+loadingText.textContent = 'Downloading Models... 0%';
+loadingBar.style.width = '0%';
 
-    const dinoDataBuffer = await fetchWithProgress(
-        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dinov2_vitb14.onnx.data',
-        (pct) => {
-            const display = 20 + Math.round(pct * 25); // 20–45% allocation
-            loadingBar.style.width = display + '%';
-            loadingText.textContent = `Loading DINO Weights... ${display}%`;
-        }
-    );
+let progressDino = 0;
+let progressFacenet = 0;
 
-    dinoSession = await InferenceSession.create(dinoBuffer, {
-        executionProviders: ['webgpu', 'wasm'],
-        externalData: [
-            {
-                data: new Uint8Array(dinoDataBuffer),
-                path: 'dinov2_vitb14.onnx.data'
-            }
-        ]
-    });
+function updateCombinedProgress() {
+    // Weight DINO (344MB) at 85% of total download size, FaceNet (92MB) at 15%
+    const combined = (progressDino * 0.85) + (progressFacenet * 0.15);
+    const display = Math.round(combined * 80); // Leave last 20% for WebGPU compilation
+    loadingBar.style.width = display + '%';
+    loadingText.textContent = `Downloading AI Models... ${display}%`;
+}
 
-    loadingBar.style.width = '50%';
-    loadingText.textContent = 'Loading FaceNet...';
+// 1. Concurrent downloads of inline files
+const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
+    fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx',
+        (pct) => { progressDino = pct; updateCombinedProgress(); }
+    ),
+    fetchWithProgress(
+        'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
+        (pct) => { progressFacenet = pct; updateCombinedProgress(); }
+    ),
+    FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
+]);
 
-    const facenetBuffer = await fetchWithProgress('https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx', (pct) => {
-        const display = 50 + Math.round(pct * 40); // FaceNet occupies 50–90%
-        loadingBar.style.width = display + '%';
-        loadingText.textContent = `Loading FaceNet... ${display}%`;
-    });
+loadingText.textContent = 'Initializing AI Sessions...';
+loadingBar.style.width = '85%';
 
-    const faceNetSession = await InferenceSession.create(facenetBuffer, {
-        executionProviders: ['webgpu', 'wasm'],
-    });
-
-    loadingBar.style.width = '95%';
-    loadingText.textContent = 'Loading face detector...';
-    const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm');
-    const faceDetector = await FaceDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' },
+// 2. Initialize sessions (Single-file models will not trigger external .data WASM crashes)
+const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
+    InferenceSession.create(dinoBuffer, { executionProviders: ['webgpu', 'wasm'] }),
+    InferenceSession.create(facenetBuffer, { executionProviders: ['webgpu', 'wasm'] }),
+    FaceDetector.createFromOptions(vision, {
+        baseOptions: { 
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite' 
+        },
         runningMode: 'IMAGE',
         minDetectionConfidence: 0.9,
-    });
+    })
+]);
 
-    loadingBar.style.width = '100%';
-    loadingText.textContent = '✓ Ready — upload a photo to search';
-    btn.disabled = false;
-    setTimeout(() => {
-        loadingBar.style.width = '0%';
-        loadingText.textContent = '';
-        document.getElementById('loading-container').style.display = 'none';
-    }, 2000); // longer so user sees it's ready
+loadingBar.style.width = '100%';
+loadingText.textContent = '✓ Ready — upload a photo to search';
+btn.disabled = false;
 
+setTimeout(() => {
+    loadingBar.style.width = '0%';
+    loadingText.textContent = '';
+    document.getElementById('loading-container').style.display = 'none';
+}, 2000);
+        
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
         canvas.width = 224; canvas.height = 224;
@@ -561,7 +533,7 @@ async function processFaceImage(file) {
         
         const cleanUrl = url.startsWith(BASE) ? url.slice(BASE.length) : url;
         const lightboxImg = document.getElementById('lightbox-img');
-    lightboxImg.src = `/thumbnail/${url}?size=800`;
+    lightboxImg.src = `/files/${url}`;
     lightboxImg.style.filter = 'blur(2px)';
     const full = new Image();
     full.onload = () => {
@@ -822,7 +794,28 @@ async function processFaceImage(file) {
     if (serverImages.length > 0) window.renderResults({ images: serverImages });
     {% endif %}
 window.favOverlaySelected = new Set();
-
+function renderFavStrip() {
+        const strip = document.getElementById('fav-strip');
+        strip.innerHTML = '';
+        const favs = getFavorites();
+        if (favs.length === 0) {
+            strip.innerHTML = '<span style="font-size:12px;color:#8e8e93">No favorites yet</span>';
+            return;
+        }
+        favs.forEach(url => {
+            const el = document.createElement('div');
+            el.className = 'fav-thumb';
+            el.style.backgroundImage = `url('/thumbnail/${url}')`;
+            el.title = url.split('/').pop();
+            el.addEventListener('click', () => {
+                const allFavs = getFavorites().map(u => ({ url: u, score: 0, lat: null, lon: null, location: null }));
+                const i = allFavs.findIndex(img => img.url === url);
+                openLightbox(allFavs, i >= 0 ? i : 0);
+            });
+            strip.appendChild(el);
+        });
+    }
+    window.renderFavStrip = renderFavStrip;
 async function openFavoritesOverlay() {
     const overlay = document.getElementById('favorites-overlay');
     const grid = document.getElementById('fav-overlay-grid');
@@ -2263,7 +2256,7 @@ function buildGallery(images, startIndex) {
         const url = img.url.replace(/^\//, '');
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
-        photo.style.backgroundImage = `url('/thumbnail/${url}')`;
+        photo.style.backgroundImage = `url('/files/${url}')`;
         main.insertBefore(photo, main.querySelector('.gallery-controls'));
 
         const thumb = document.createElement('div');
