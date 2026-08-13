@@ -1595,11 +1595,11 @@ function buildGallery(images, startIndex) {
 
     if (!main || !strip) return;
 
-    // Clear previous elements
+    // ── 3. UNLOAD ON NEW SEARCH ──
+    // Removing old DOM nodes clears all previous loaded images from browser memory
     main.querySelectorAll('.gallery-photo').forEach(el => el.remove());
     strip.innerHTML = '';
 
-    // Attach images array globally so navigation buttons can access it
     window.currentImages = images;
     galleryIndex = startIndex;
 
@@ -1613,10 +1613,11 @@ function buildGallery(images, startIndex) {
         const mainSrc = isVideo ? `/thumbnail/${url}` : `/files/${url}`;
         const thumbSrc = `/thumbnail/${url}`;
 
-        // 1. Create Main Photo Element (Deferred load via data-src)
+        // 1. Create Main Photo Element
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
         photo.dataset.src = mainSrc;
+        photo.dataset.thumb = thumbSrc;
         photo.style.cursor = 'pointer';
 
         photo.addEventListener('click', () => {
@@ -1630,7 +1631,7 @@ function buildGallery(images, startIndex) {
             main.appendChild(photo);
         }
 
-        // 2. Create Strip Thumbnail Element (Load IMMEDIATELY for ALL thumbnails)
+        // 2. Create Strip Thumbnail Element
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
         thumb.style.backgroundImage = `url('${thumbSrc}')`;
@@ -1639,29 +1640,44 @@ function buildGallery(images, startIndex) {
         strip.appendChild(thumb);
     });
 
-    // Initial load: 3 before, current, and 3 after
-    preloadUpcoming(startIndex, 3);
+    // Initial load: current photo + 5 ahead
+    preloadUpcoming(startIndex, 5);
 }
 
-function preloadUpcoming(currentIndex, windowSize = 3) {
+function preloadUpcoming(currentIndex, aheadCount = 5) {
     const photos = document.querySelectorAll('.gallery-photo');
     if (!photos.length) return;
 
     photos.forEach((photo, idx) => {
-        const distance = idx - currentIndex;
+        // ── 2. KEEP ALREADY LOADED PHOTOS ──
+        // If this image was already loaded during browsing, skip it and leave it loaded
+        if (photo.dataset.loaded === 'true') return;
 
-        // 1. Load images within ±3 window (3 before, current, 3 after)
-        if (distance <= windowSize) {
-            if (photo.dataset.src && !photo.style.backgroundImage) {
-                photo.style.backgroundImage = `url('${photo.dataset.src}')`;
+        // ── 1. LOAD 5 PHOTOS IN ADVANCE ──
+        // Checks if photo is current or within the next 5 photos ahead
+        const isWithinAdvanceWindow = idx >= currentIndex && idx <= currentIndex + aheadCount;
+
+        if (isWithinAdvanceWindow) {
+            const highResSrc = photo.dataset.src;
+            const thumbSrc = photo.dataset.thumb;
+
+            if (!highResSrc) return;
+
+            // Instant low-res thumbnail placeholder (prevents black screen)
+            if (!photo.style.backgroundImage && thumbSrc) {
+                photo.style.backgroundImage = `url('${thumbSrc}')`;
             }
-        } 
-        // 2. Unload main photos outside range to free browser RAM
-        // else {
-        //     if (photo.style.backgroundImage) {
-        //         photo.style.backgroundImage = '';
-        //     }
+
+            // Load high-res file in background
+            const fullImg = new Image();
+            fullImg.onload = () => {
+                photo.style.backgroundImage = `url('${highResSrc}')`;
+                photo.dataset.loaded = 'true'; // Mark as loaded permanently for this search session
+            };
+            fullImg.src = highResSrc;
         }
+        
+        // Notice: NO "else" unload logic here! Once loaded, images stay loaded.
     });
 }
 
@@ -1674,23 +1690,23 @@ function setGalleryIndex(i) {
 
     galleryIndex = i;
 
-    // Maintain 3 before & 3 after on navigation
-    preloadUpcoming(i, 1);
+    // Load current photo + 5 ahead on navigation
+    preloadUpcoming(i, 5);
 
     thumbs[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
 }
 
-document.getElementById('gallery-prev').addEventListener('click', () => {
+document.getElementById('gallery-prev')?.addEventListener('click', () => {
     const len = window.currentImages ? window.currentImages.length : 0;
     if (len) setGalleryIndex((galleryIndex - 1 + len) % len);
 });
 
-document.getElementById('gallery-next').addEventListener('click', () => {
+document.getElementById('gallery-next')?.addEventListener('click', () => {
     const len = window.currentImages ? window.currentImages.length : 0;
     if (len) setGalleryIndex((galleryIndex + 1) % len);
 });
 
-document.getElementById('image-in').addEventListener('change', e => {
+document.getElementById('image-in')?.addEventListener('change', e => {
     const file = e.target.files[0];
     document.getElementById('file-label-text').textContent = file?.name || 'Search by photo';
     if (file) {
