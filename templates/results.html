@@ -1675,7 +1675,7 @@ function setGalleryIndex(i) {
     galleryIndex = i;
 
     // Maintain 3 before & 3 after on navigation
-    preloadUpcoming(i, 5);
+    preloadUpcoming(i, 1);
 
     thumbs[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
 }
