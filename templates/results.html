@@ -14,28 +14,39 @@
     <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
     <link rel="stylesheet" href='/style.css'>
     <script type="module">
-    import { InferenceSession, Tensor, env } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
-    import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
+  import { InferenceSession, Tensor, env } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
+import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
 
-    const loadingBar = document.getElementById('loading-bar');
-    const loadingText = document.getElementById('loading-text');
-    const btn = document.querySelector('button[name="forwardBtn"]');
-    btn.disabled = true;
+const loadingBar = document.getElementById('loading-bar');
+const loadingText = document.getElementById('loading-text');
+const btn = document.querySelector('button[name="forwardBtn"]');
+btn.disabled = true;
 
-async function fetchWithProgress(url, onProgress) {
-    // 1. Explicitly follow redirects from HF to CDN
-    const response = await fetch(url, { redirect: 'follow' });
-    
-    if (!response.ok) {
-        throw new Error(`Failed to download ${url}: ${response.statusText}`);
+const CACHE_NAME = 'ai-models-v1';
+
+async function fetchWithCacheAndProgress(url, onProgress) {
+    const cache = await caches.open(CACHE_NAME);
+    const cachedResponse = await cache.match(url);
+
+    // 1. Return immediately if model is already in browser cache
+    if (cachedResponse) {
+        onProgress(1.0);
+        return await cachedResponse.arrayBuffer();
     }
+
+    // 2. Otherwise download and stream
+    const response = await fetch(url, { redirect: 'follow' });
+    if (!response.ok) throw new Error(`Failed to download ${url}: ${response.statusText}`);
+
+    // Clone response to store in Cache API for future loads
+    cache.put(url, response.clone());
 
     const contentLength = response.headers.get('Content-Length');
     const total = contentLength ? parseInt(contentLength, 10) : null;
     const reader = response.body.getReader();
     const chunks = [];
     let received = 0;
-    
+
     while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -53,37 +64,37 @@ async function fetchWithProgress(url, onProgress) {
     return buffer.buffer;
 }
 
-loadingText.textContent = 'Downloading Models... 0%';
+loadingText.textContent = 'Checking model cache...';
 loadingBar.style.width = '0%';
 
 let progressDino = 0;
 let progressFacenet = 0;
 
 function updateCombinedProgress() {
-    // Weight DINO (344MB) at 85% of total download size, FaceNet (92MB) at 15%
     const combined = (progressDino * 0.85) + (progressFacenet * 0.15);
-    const display = Math.round(combined * 80); // Leave last 20% for WebGPU compilation
+    const display = Math.round(combined * 85);
     loadingBar.style.width = display + '%';
-    loadingText.textContent = `Downloading AI Models... ${display}%`;
+    loadingText.textContent = `Loading AI Models... ${display}%`;
 }
 
-// 1. Concurrent downloads of inline files
+// 1. Parallel download / cache retrieve
 const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
-    fetchWithProgress(
+    fetchWithCacheAndProgress(
+        // Tip: If hosted on your Pi, replace with '/models/dino_vitb16_inline.onnx'
         'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx',
         (pct) => { progressDino = pct; updateCombinedProgress(); }
     ),
-    fetchWithProgress(
+    fetchWithCacheAndProgress(
         'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/facenet_inline.onnx',
         (pct) => { progressFacenet = pct; updateCombinedProgress(); }
     ),
     FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm')
 ]);
 
-loadingText.textContent = 'Initializing AI Sessions...';
+loadingText.textContent = 'Initializing AI Hardware (WebGPU)...';
 loadingBar.style.width = '85%';
 
-// 2. Initialize sessions (Single-file models will not trigger external .data WASM crashes)
+// 2. Initialize sessions
 const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
     InferenceSession.create(dinoBuffer, { executionProviders: ['webgpu', 'wasm'] }),
     InferenceSession.create(facenetBuffer, { executionProviders: ['webgpu', 'wasm'] }),
@@ -104,7 +115,7 @@ setTimeout(() => {
     loadingBar.style.width = '0%';
     loadingText.textContent = '';
     document.getElementById('loading-container').style.display = 'none';
-}, 2000);
+}, 1500);
         
     function preprocessDino(imgElement) {
         const canvas = document.createElement('canvas');
