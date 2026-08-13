@@ -1589,16 +1589,17 @@ let galleryIndex = 0;
 // Set to track loaded URLs so we never re-download or re-apply background images
 const loadedUrls = new Set();
 
+let galleryIndex = 0;
+
 function buildGallery(images, startIndex) {
     const main = document.getElementById('gallery-main');
     const strip = document.getElementById('gallery-strip');
 
     if (!main || !strip) return;
 
-    // Clear previous elements and state
+    // Clear previous elements
     main.querySelectorAll('.gallery-photo').forEach(el => el.remove());
     strip.innerHTML = '';
-    loadedUrls.clear();
 
     // Attach images array globally so navigation buttons can access it
     window.currentImages = images;
@@ -1614,7 +1615,7 @@ function buildGallery(images, startIndex) {
         const mainSrc = isVideo ? `/thumbnail/${url}` : `/files/${url}`;
         const thumbSrc = `/thumbnail/${url}`;
 
-        // 1. Create Main Photo Element (Store source in data-src instead of style)
+        // 1. Create Main Photo Element (Deferred load via data-src)
         const photo = document.createElement('div');
         photo.className = 'gallery-photo' + (i === startIndex ? ' active' : '');
         photo.dataset.src = mainSrc;
@@ -1631,52 +1632,37 @@ function buildGallery(images, startIndex) {
             main.appendChild(photo);
         }
 
-        // 2. Create Strip Thumbnail Element (Store source in data-src)
+        // 2. Create Strip Thumbnail Element (Load IMMEDIATELY for ALL thumbnails)
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
-        thumb.dataset.src = thumbSrc;
+        thumb.style.backgroundImage = `url('${thumbSrc}')`;
 
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
 
-    // Initial load: load active image first, then up to +5 ahead
-    preloadUpcoming(startIndex, 5);
+    // Initial load: 3 before, current, and 3 after
+    preloadUpcoming(startIndex, 3);
 }
 
 function preloadUpcoming(currentIndex, windowSize = 3) {
     const photos = document.querySelectorAll('.gallery-photo');
-    const thumbs = document.querySelectorAll('.strip-thumb');
-    const total = photos.length;
-
-    if (!total) return;
+    if (!photos.length) return;
 
     photos.forEach((photo, idx) => {
         const distance = Math.abs(idx - currentIndex);
 
-        // 1. Keep images within range (current - 3 to current + 3)
+        // 1. Load images within ±3 window (3 before, current, 3 after)
         if (distance <= windowSize) {
-            if (photo.dataset.src && photo.style.backgroundImage === '') {
+            if (photo.dataset.src && !photo.style.backgroundImage) {
                 photo.style.backgroundImage = `url('${photo.dataset.src}')`;
             }
         } 
-        // 2. UNLOAD images outside range to free browser RAM instantly
+        // 2. Unload main photos outside range to free browser RAM
         else {
-            if (photo.style.backgroundImage !== '') {
-                photo.style.backgroundImage = ''; // Releases bitmap memory
+            if (photo.style.backgroundImage) {
+                photo.style.backgroundImage = '';
             }
-        }
-    });
-
-    // Thumbnails are small (~15KB), so load them in a slightly wider window (e.g. 10 ahead/behind)
-    thumbs.forEach((thumb, idx) => {
-        const distance = Math.abs(idx - currentIndex);
-        if (distance <= 10) {
-            if (thumb.dataset.src && thumb.style.backgroundImage === '') {
-                thumb.style.backgroundImage = `url('${thumb.dataset.src}')`;
-            }
-        } else {
-            thumb.style.backgroundImage = '';
         }
     });
 }
@@ -1690,20 +1676,22 @@ function setGalleryIndex(i) {
 
     galleryIndex = i;
 
-    // Load current photo immediately + next 5 ahead
+    // Maintain 3 before & 3 after on navigation
     preloadUpcoming(i, 5);
 
     thumbs[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
 }
 
 document.getElementById('gallery-prev').addEventListener('click', () => {
-    const len = window.currentImages.length;
+    const len = window.currentImages ? window.currentImages.length : 0;
     if (len) setGalleryIndex((galleryIndex - 1 + len) % len);
 });
+
 document.getElementById('gallery-next').addEventListener('click', () => {
-    const len = window.currentImages.length;
+    const len = window.currentImages ? window.currentImages.length : 0;
     if (len) setGalleryIndex((galleryIndex + 1) % len);
 });
+
 document.getElementById('image-in').addEventListener('change', e => {
     const file = e.target.files[0];
     document.getElementById('file-label-text').textContent = file?.name || 'Search by photo';
