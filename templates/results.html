@@ -1648,7 +1648,7 @@ function preloadUpcoming(currentIndex, windowSize = 3) {
     if (!photos.length) return;
 
     photos.forEach((photo, idx) => {
-        const distance = Math.abs(idx - currentIndex);
+        const distance = idx - currentIndex;
 
         // 1. Load images within ±3 window (3 before, current, 3 after)
         if (distance <= windowSize) {
@@ -1657,10 +1657,10 @@ function preloadUpcoming(currentIndex, windowSize = 3) {
             }
         } 
         // 2. Unload main photos outside range to free browser RAM
-        else {
-            if (photo.style.backgroundImage) {
-                photo.style.backgroundImage = '';
-            }
+        // else {
+        //     if (photo.style.backgroundImage) {
+        //         photo.style.backgroundImage = '';
+        //     }
         }
     });
 }
