@@ -1691,7 +1691,7 @@ function setGalleryIndex(i) {
     galleryIndex = i;
 
     // Load current photo + 5 ahead on navigation
-    preloadUpcoming(i, 5);
+    preloadUpcoming(i, 1);
 
     thumbs[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
 }
