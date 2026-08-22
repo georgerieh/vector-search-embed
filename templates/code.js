@@ -684,76 +684,88 @@
     };
         window.renderResults = function(data) {
     window.currentImages = data.images;
-    const grid = document.getElementById('photo-grid');
-    grid.innerHTML = '';
-    const favs = getFavorites();
+const grid = document.getElementById('photo-grid');
+grid.innerHTML = '';
+const favs = getFavorites();
 
-    data.images.forEach((img, i) => {
-        const url = img.url.replace(/^\//, '');
-        const fileUrl = `/files/${url}`;      // full size — for lightbox
-        const thumbUrl = `/thumbnail/${url}`; // small — for grid
-        const isFav = favs.includes(url);
+const fragment = document.createDocumentFragment();
 
-        const cell = document.createElement('div');
-        cell.dataset.url = url;
-        cell.className = 'grid-cell';
-        cell.innerHTML = `
-            <div class="grid-thumb" style="background-image: url('${thumbUrl}');">
-                <div class="grid-overlay">
-                    <button class="thumb-btn thumb-fav ${isFav ? 'fav-active' : ''}" title="Favorite">♥</button>
-                    <button class="thumb-btn thumb-delete" title="Delete">✕</button>
-                </div>
+data.images.forEach((img, i) => {
+    const url = img.url.replace(/^\//, '');
+    const thumbUrl = `/thumbnail/${url}`;
+    const isFav = favs.includes(url);
+
+    const cell = document.createElement('div');
+    cell.dataset.url = url;
+    cell.className = 'grid-cell';
+    
+    cell.innerHTML = `
+        <div class="grid-thumb" style="background-image: url('${thumbUrl}');">
+            <div class="grid-overlay">
+                <button class="thumb-btn thumb-fav ${isFav ? 'fav-active' : ''}" title="Favorite">♥</button>
+                <button class="thumb-btn thumb-delete" title="Delete">✕</button>
             </div>
-        `;
+        </div>
+    `;
 
-        // Click handler to select or open lightbox
-        cell.querySelector('.grid-thumb').addEventListener('click', e => {
-            if (e.target.closest('.thumb-btn')) return;
+    // Click handler: Toggle batch selection OR open Lightbox
+    cell.querySelector('.grid-thumb').addEventListener('click', e => {
+        if (e.target.closest('.thumb-btn')) return;
 
-            if (gridSelected.size > 0 || e.shiftKey) {
-                if (gridSelected.has(url)) {
-                    gridSelected.delete(url);
-                    cell.classList.remove('grid-selected');
-                } else {
-                    gridSelected.add(url);
-                    cell.classList.add('grid-selected');
-                }
-                updateGridToolbar();
-                return;
+        if (gridSelected.size > 0 || e.shiftKey) {
+            if (gridSelected.has(url)) {
+                gridSelected.delete(url);
+                cell.classList.remove('grid-selected');
+            } else {
+                gridSelected.add(url);
+                cell.classList.add('grid-selected');
             }
-
-            openLightbox(data.images, i, false);
-        });
-
-        cell.addEventListener('contextmenu', e => {
-            e.preventDefault();
-            gridSelected.add(url);
-            cell.classList.add('grid-selected');
             updateGridToolbar();
-        });
+            return;
+        }
 
-        // Favorite button listener
-        cell.querySelector('.thumb-fav').addEventListener('click', e => {
-            e.stopPropagation();
-            const isFav = toggleFavorite(url);
-            e.target.classList.toggle('fav-active', isFav);
-        });
+        openLightbox(data.images, i, false);
+    });
 
-        // Delete button listener
-        cell.querySelector('.thumb-delete').addEventListener('click', async e => {
-            e.stopPropagation();
-            if (!confirm('Delete this photo?')) return;
-            const fd = new FormData();
-            fd.append('image_paths', url);
-            await fetch('/delete_photo', { method: 'POST', body: fd });
+
+    // Favorite button handler
+    cell.querySelector('.thumb-fav').addEventListener('click', e => {
+        e.stopPropagation();
+        const nowFav = toggleFavorite(url);
+        e.currentTarget.classList.toggle('fav-active', nowFav);
+    });
+
+    // Delete button handler
+    cell.querySelector('.thumb-delete').addEventListener('click', async e => {
+        e.stopPropagation();
+        if (!confirm('Delete this photo?')) return;
+        
+        const fd = new FormData();
+        fd.append('image_paths', url);
+        
+        try {
+            const res = await fetch('/delete_photo', { method: 'POST', body: fd });
+            if (!res.ok) throw new Error('Deletion failed');
+
+            // 1. Sync state memory
+            window.currentImages = window.currentImages.filter(item => item.url.replace(/^\//, '') !== url);
+            gridSelected.delete(url);
+            updateGridToolbar();
+
+            // 2. Animate and clean up DOM node
             cell.style.opacity = '0';
             cell.style.transform = 'scale(0.85)';
             setTimeout(() => cell.remove(), 300);
-        });
-
-        grid.appendChild(cell);
+        } catch (err) {
+            alert('Could not delete photo.');
+        }
     });
 
+    fragment.appendChild(cell);
+});
+
+// Single DOM append operation for performance
+grid.appendChild(fragment);
             // staggered appear animation
             requestAnimationFrame(() => {
                 grid.querySelectorAll('.grid-cell').forEach((el, i) => {
