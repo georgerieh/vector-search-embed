@@ -587,8 +587,8 @@
                 window.initMap();
                 clearInterval(interval);
             }
-        }, 100);*/
-        });
+        }, 100);
+        })*/
                 const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
@@ -771,11 +771,6 @@
 
         loadFavoritesFromDisk();
 
-        // init with server-rendered data if any
-        {% if images %}
-        const serverImages = {{ images | tojson }};
-        if (serverImages.length > 0) window.renderResults({ images: serverImages });
-        {% endif %}
     window.favOverlaySelected = new Set();
     function renderFavStrip() {
             const strip = document.getElementById('fav-strip');

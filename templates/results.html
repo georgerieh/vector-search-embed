@@ -21,8 +21,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
-    <link rel="stylesheet" href="/style.css" />
-    <script src="/code.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./code.js"></script>
   </head>
   <body>
     <div class="sidebar">
@@ -124,16 +124,6 @@
         </div>
       </div>
 
-      <div class="sidebar-stats">
-        <span id="result-count">No results yet</span>
-        <span>{{ gen_time }}s · {{ query_time }}s</span>
-        <button
-          onclick="window.deleteSelectedPhotos()"
-          class="toolbar-danger-btn"
-        >
-          ✕ Delete Selected
-        </button>
-      </div>
 
       <div class="sidebar-section">
         <div class="section-title">Favorites</div>
