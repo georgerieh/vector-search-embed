@@ -753,7 +753,6 @@
 
         grid.appendChild(cell);
     });
-};
 
             // staggered appear animation
             requestAnimationFrame(() => {
@@ -776,6 +775,7 @@
 
 
         loadFavoritesFromDisk();
+        };
 
     window.favOverlaySelected = new Set();
     function renderFavStrip() {
