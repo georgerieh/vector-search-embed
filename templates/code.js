@@ -78,7 +78,6 @@
     loadingText.textContent = 'Initializing AI Hardware (WebGPU)...';
     loadingBar.style.width = '85%';
 
-    // 2. Initialize sessions
     const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
         InferenceSession.create(dinoBuffer, { executionProviders: ['webgpu', 'wasm'] }),
         InferenceSession.create(facenetBuffer, { executionProviders: ['webgpu', 'wasm'] }),
@@ -2357,7 +2356,8 @@ if (
     )
 )
     return;
-
+window.loadingBar = loadingBar;
+window.loadingText = loadingText;
 document.getElementById("loading-container").style.display = "block";
 if (window.loadingText)
     window.loadingText.textContent = `Deleting ${count} photos...`;
