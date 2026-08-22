@@ -773,9 +773,6 @@
 
             // if in gallery view, rebuild
             if (window.currentView === 'gallery') buildGallery(data.images, 1);
-        };
-
-        // init favorites strip
 
 
         loadFavoritesFromDisk();
