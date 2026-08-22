@@ -606,7 +606,7 @@ async function processFaceImage(file) {
         initMap();
         leafletMap.on('zoomend moveend', updateHexLayer);
         updateHexLayer();
-        if (markerClusters) leafletMap.removeLayer(markerClusters);
+        /*if (markerClusters) leafletMap.removeLayer(markerClusters);
         markerClusters = L.markerClusterGroup({ spiderfyOnMaxZoom: true, showCoverageOnHover: false });
         const bounds = [];
         images.forEach((img, i) => {
@@ -618,7 +618,7 @@ async function processFaceImage(file) {
             markerClusters.addLayer(marker);
             bounds.push([img.lat, img.lon]);
         });
-        leafletMap.addLayer(markerClusters);
+        leafletMap.addLayer(markerClusters); */
         if (bounds.length > 0) leafletMap.fitBounds(bounds, { padding: [20, 20] });
     }
 
@@ -735,7 +735,7 @@ async function processFaceImage(file) {
 
         data.images.forEach((img, i) => {
             const url = img.url.replace(/^\//, '');
-            const fileUrl = `/files/${url}`;      // full size — for lightbox
+            /*const fileUrl = `/files/${url}`;      // full size — for lightbox*/
             const thumbUrl = `/thumbnail/${url}`; // small — for grid
             const isFav = favs.includes(url);
 
@@ -748,7 +748,7 @@ async function processFaceImage(file) {
                         <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
                         <button class="thumb-btn thumb-delete" title="Delete">✕</button>
                     </div>
-                    <div class="grid-score">${img.score.toFixed(2)}</div>
+                    /*<div class="grid-score">${img.score.toFixed(2)}</div>*/
                 </div>
             `;
             cell.querySelector('.grid-thumb').addEventListener('click', e => {
@@ -2270,7 +2270,7 @@ function buildGallery(images, startIndex) {
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
         thumb.style.backgroundImage = `url('/thumbnail/${url}')`;
         photo.style.cursor = 'pointer';
-        photo.addEventListener('click', () => window.openLightbox(images, i));
+        photo.addEventListener('click', () => window.openLightbox(images, galleryIndex));
         thumb.addEventListener('click', () => setGalleryIndex(i));
         strip.appendChild(thumb);
     });
@@ -2699,10 +2699,10 @@ function checkAndLoadMemory() {
     const today = new Date().toDateString();
     localStorage.setItem('mem_last_visit', today);
     // load if first visit today
-    if (lastVisit !== today) {
+    /* if (lastVisit !== today) {
         // auto-switch to memory tab on new day
         setTimeout(() => setView('memory'), 1200); // after models load
-    }
+    }  */ 
 }
 
 checkAndLoadMemory();
@@ -2734,7 +2734,7 @@ function renderAlbumList(albums) {
             position:relative;
         `;
         el.innerHTML = `
-            <span style="font-size:16px;">🗂</span>
+            <span style="font-size:16px;"></span>
             <div style="flex:1;min-width:0;">
                 <div class="album-name" style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${album.name}</div>
                 <div style="font-size:10px;color:#8e8e93;">${album.count} photos</div>
