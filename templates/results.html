@@ -2128,19 +2128,7 @@ document.getElementById('memory-refresh-btn').addEventListener('click', () => {
     loadMemory();
 });
 
-// ── AUTO-LOAD on new session ──
-function checkAndLoadMemory() {
-    const lastVisit = localStorage.getItem('mem_last_visit');
-    const today = new Date().toDateString();
-    localStorage.setItem('mem_last_visit', today);
-    // load if first visit today
-    if (lastVisit !== today) {
-        // auto-switch to memory tab on new day
-        setTimeout(() => setView('memory'), 1200); // after models load
-    }
-}
 
-checkAndLoadMemory();
 // ── ALBUMS ──
 async function loadAlbums() {
     const resp = await fetch('/albums');
