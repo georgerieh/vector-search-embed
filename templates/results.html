@@ -496,11 +496,13 @@ async function processFaceImage(file) {
     }
 
     // ── LIGHTBOX ──
+    {
     let lightboxImages = [], lightboxIndex = 0;
-
-    function openLightbox(images, index) {
+    let to_preload_others=true;
+    function openLightbox(images, index, multiple=to_preload_others) {
         lightboxImages = images;
         lightboxIndex = index;
+        let to_preload_others=multiple;
         updateLightbox();
         document.getElementById('lightbox').classList.add('open');
         document.body.style.overflow = 'hidden';
@@ -537,7 +539,7 @@ async function processFaceImage(file) {
     
     return clean;
 }
-function updateLightbox() {
+function updateLightbox(multiple=true) {
     const img = lightboxImages[lightboxIndex];
     const url = img.url.replace(/^\//, '');
     const BASE = 'media/georgerieh/T7/photos_from_icloud/';
@@ -567,8 +569,8 @@ function updateLightbox() {
 
 
     document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
-    document.getElementById('lightbox-prev').addEventListener('click', () => { lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length; updateLightbox(); });
-    document.getElementById('lightbox-next').addEventListener('click', () => { lightboxIndex = (lightboxIndex + 1) % lightboxImages.length; updateLightbox(); });
+    document.getElementById('lightbox-prev').addEventListener('click', () => { if(to_preload_others) {lightboxIndex = (lightboxIndex - 1 + lightboxImages.length) % lightboxImages.length; updateLightbox()}; });
+    document.getElementById('lightbox-next').addEventListener('click', () => { if(to_preload_others) {lightboxIndex = (lightboxIndex + 1) % lightboxImages.length; updateLightbox()}; });
     document.getElementById('lightbox-fav').addEventListener('click', () => {
     const url = lightboxImages[lightboxIndex].url.replace(/^\//, '');
         document.getElementById('lightbox-fav').classList.toggle('active', toggleFavorite(url));
@@ -582,26 +584,14 @@ function updateLightbox() {
     });
 
     window.openLightbox = openLightbox;
-
+    }
     // ── MAP ──
     
     function updateMap(images) {
         initMap();
         leafletMap.on('zoomend moveend', updateHexLayer);
         updateHexLayer();
-        if (markerClusters) leafletMap.removeLayer(markerClusters);
-        markerClusters = L.markerClusterGroup({ spiderfyOnMaxZoom: true, showCoverageOnHover: false });
         const bounds = [];
-        images.forEach((img, i) => {
-            if (!img.lat) return;
-            const url = img.url.replace(/^\//, '');
-            const marker = L.marker([img.lat, img.lon]);
-            marker.bindPopup(`<img src="/thumbnail/${url}" style="width:120px;height:80px;object-fit:cover;border-radius:6px;"><br><small>${img.location||''}</small>`);
-            marker.on('click', () => openLightbox(images, i));
-            markerClusters.addLayer(marker);
-            bounds.push([img.lat, img.lon]);
-        });
-        leafletMap.addLayer(markerClusters);
         if (bounds.length > 0) leafletMap.fitBounds(bounds, { padding: [20, 20] });
     }
 
@@ -656,7 +646,7 @@ function updateLightbox() {
                     <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
                     <button class="thumb-btn thumb-delete" title="Delete">✕</button>
                 </div>
-                <div class="grid-score">${img.score.toFixed(2)}</div>
+                /*<div class="grid-score">${img.score.toFixed(2)}</div>*/
             </div>
         `;
             cell.querySelector('.grid-thumb').addEventListener('click', e => {
@@ -672,7 +662,7 @@ function updateLightbox() {
                     updateGridToolbar();
                     return;
                 }
-                // openLightbox(window.currentImages, offset + i);
+                openLightbox(window.currentImages, offset + i, multiple=false);
                 cell.addEventListener('contextmenu', e => {
                    e.preventDefault();
                 gridSelected.add(url);
@@ -731,7 +721,7 @@ function updateLightbox() {
                         <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
                         <button class="thumb-btn thumb-delete" title="Delete">✕</button>
                     </div>
-                    <div class="grid-score">${img.score.toFixed(2)}</div>
+                    /*<div class="grid-score">${img.score.toFixed(2)}</div>*/
                 </div>
             `;
             cell.querySelector('.grid-thumb').addEventListener('click', e => {
@@ -791,7 +781,7 @@ function updateLightbox() {
         document.getElementById('empty-state').style.display = 'none';
 
         // if in gallery view, rebuild
-        if (window.currentView === 'gallery') buildGallery(data.images, 0);
+        if (window.currentView === 'gallery') buildGallery(data.images, 1);
     };
 
     // init favorites strip
@@ -1578,13 +1568,13 @@ window.setView = function(view) {
     document.querySelector('.sidebar').style.display = ['gallery', 'memory', 'info'].includes(view) ? 'none' : '';
     document.querySelector('.main').style.marginLeft = ['gallery', 'memory', 'info'].includes(view) ? '0' : '260px';
 
-    if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 0);
+    if (view === 'gallery' && hasResults) buildGallery(window.currentImages, 1);
     if (view === 'info' && !window.statsLoaded) { window.statsLoaded = true; loadStats(); }
     if (view === 'info') { document.getElementById('info-pane').scrollTop = 0; }
     if (view === 'memory') loadMemory();
     if (view === 'review' && !document.getElementById('review-grid').children.length) loadReviewBatch();
 }
-let galleryIndex = 0;
+let galleryIndex = 1;
 
 // Track active fetch requests so we can cancel them on jumps
 const activeFetchControllers = new Map(); // index -> AbortController
@@ -1595,7 +1585,6 @@ function buildGallery(images, startIndex) {
 
     if (!main || !strip) return;
 
-    // Clear old state & cancel all pending downloads from previous search
     cancelAllDownloads();
     main.querySelectorAll('.gallery-photo').forEach(el => el.remove());
     strip.innerHTML = '';
@@ -1634,7 +1623,7 @@ function buildGallery(images, startIndex) {
         const thumb = document.createElement('div');
         thumb.className = 'strip-thumb' + (i === startIndex ? ' active' : '');
         thumb.style.backgroundImage = `url('${thumbSrc}')`;
-        thumb.addEventListener('click', () => setGalleryIndex(i));
+        thumb.addEventListener('click', () => setGalleryIndex(galleryIndex));
         strip.appendChild(thumb);
     });
 
@@ -2466,20 +2455,7 @@ document.getElementById('grid-fav-selected').addEventListener('click', () => {
         clearGridSelection();
     }, 800);
 });
-document.getElementById('clear-btn').addEventListener('click', () => {
-    document.getElementById('start-date').value = '';
-    document.getElementById('end-date').value = '';
-    document.getElementById('country-filter').value = '';
-    document.getElementById('city-filter').value = '';
-    document.getElementById('h3-filter').value = '';
-    document.getElementById('limit').value = '';
-    document.getElementById('image-in').value = '';
-    document.getElementById('file-label-text').textContent = 'Search by photo';
-    document.getElementById('ref-preview').style.display = 'none';
-    // clear selected face
-    selectedFaceEmbedding = null;
-    document.querySelectorAll('#face-selector img').forEach(i => i.style.borderColor = 'transparent');
-});
+
 document.getElementById('clear-btn').addEventListener('click', () => {
     console.log('clear clicked');
     document.getElementById('start-date').value = '';
@@ -2534,8 +2510,8 @@ async function deleteSelectedPhotos() {
     }
 
     // Refresh UI trackers
-    if (typeof renderFavStrip === 'function') renderFavStrip();
-    if (typeof updateGridToolbar === 'function') updateGridToolbar();
+    renderFavStrip();
+    updateGridToolbar();
     
     document.getElementById('result-count').textContent = `${window.currentImages.length} photos`;
     document.getElementById('loading-container').style.display = 'none';
