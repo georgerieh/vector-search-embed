@@ -2233,7 +2233,7 @@ data.photos.forEach((photo, i) => {
 
     cell.querySelector("div").addEventListener("click", (e) => {
     if (e.target.closest(".thumb-btn")) return;
-    window.openLightbox(reviewPhotos, i);
+    window.openLightbox(reviewPhotos, i, false);
     });
 
     const overlay = cell.querySelector("div + div");
