@@ -10,7 +10,8 @@
     loadingBar.style.width = '0%';
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
-
+    window.gridSelected = window.gridSelected || new Set();
+    const gridSelected = window.gridSelected;
     const CACHE_NAME = 'ai-models-v1';
 
     async function fetchWithCacheAndProgress(url, onProgress) {
@@ -711,42 +712,27 @@ data.images.forEach((img, i) => {
         </div>
     `;
 
-    // Click handler: Toggle batch selection OR open Lightbox
-    // Click handler: Toggle batch selection OR open Lightbox
-cell.querySelector('.grid-thumb').addEventListener('click', e => {
-    if (e.target.closest('.thumb-btn')) return;
+    cell.querySelector('.grid-thumb').addEventListener('click', e => {
+        // 1. Ignore clicks on overlay action buttons (favorite/delete)
+        if (e.target.closest('.thumb-btn')) return;
 
-    // 1. Shift-click ALWAYS toggles selection state
-    if (e.shiftKey) {
-        if (gridSelected.has(url)) {
-            gridSelected.delete(url);
-            cell.classList.remove('grid-selected');
-        } else {
-            gridSelected.add(url);
-            cell.classList.add('grid-selected');
+        // 2. Select mode ONLY triggers if holding Shift (or Ctrl/Cmd)
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+            if (gridSelected.has(url)) {
+                gridSelected.delete(url);
+                cell.classList.remove('grid-selected');
+            } else {
+                gridSelected.add(url);
+                cell.classList.add('grid-selected');
+            }
+            if (typeof updateGridToolbar === 'function') updateGridToolbar();
+            return; // Stop here, do not open lightbox
         }
-        updateGridToolbar();
-        return;
-    }
 
-    // 2. Regular click on an ALREADY SELECTED item deselects it
-    if (gridSelected.has(url)) {
-        gridSelected.delete(url);
-        cell.classList.remove('grid-selected');
-        updateGridToolbar();
-        return;
-    }
-
-    // 3. Regular click on an UNSELECTED item clears selection mode and opens Lightbox
-    if (gridSelected.size > 0) {
-        gridSelected.clear();
-        document.querySelectorAll('.grid-selected').forEach(el => el.classList.remove('grid-selected'));
-        updateGridToolbar();
-    }
-
-    const currentIndex = window.currentImages.findIndex(item => item.url.replace(/^\//, '') === url);
-    openLightbox(window.currentImages, currentIndex !== -1 ? currentIndex : i, false);
-});
+        if (typeof openLightbox === 'function') {
+            openLightbox(window.currentImages, i, false);
+        }
+    });
 
 
     // Favorite button handler
@@ -1116,7 +1102,8 @@ grid.appendChild(fragment);
         document.getElementById("memory-loading").style.display = "none";
         document.getElementById("memory-content").style.display = "block";
         });
-    const gridSelected = new Set();
+
+    
     fetch("/autocomplete")
         .then((r) => r.json())
         .then((data) => {
