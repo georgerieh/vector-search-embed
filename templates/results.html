@@ -80,7 +80,6 @@ function updateCombinedProgress() {
 // 1. Parallel download / cache retrieve
 const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
     fetchWithCacheAndProgress(
-        // Tip: If hosted on your Pi, replace with '/models/dino_vitb16_inline.onnx'
         'https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx',
         (pct) => { progressDino = pct; updateCombinedProgress(); }
     ),
@@ -184,7 +183,7 @@ let markerClusters = null;
             if (!leafletMap) return;
             const zoom = leafletMap.getZoom();
             // map zoom to h3 resolution
-            const res = zoom < 4 ? 3 : zoom < 6 ? 4 : zoom < 8 ? 5 : zoom < 10 ? 6 : 7;
+            const res = zoom < 1 ? 1 : zoom < 2 ? 2 : zoom < 4 ? 3 : zoom < 6 ? 4 : zoom < 8 ? 5 : zoom < 10 ? 6 : 7;
 
             fetch(`/hex_coverage?resolution=${res}`)
                 .then(r => r.json())
@@ -1067,7 +1066,6 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         <div class="sidebar-title">Memories</div>
         <form name="input" class="search-form" enctype="multipart/form-data">
             <label class="file-upload-label">
-                <span>🖼</span>
                 <span id="file-label-text">Search by photo</span>
                 <input accept="image/*" id="image-in" name="image" type="file">
             </label>
@@ -1143,7 +1141,7 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         <div class="view-toggle">
             <button class="view-btn active" id="btn-grid" onclick="setView('grid')">Grid</button>
             <button class="view-btn" id="btn-gallery" onclick="setView('gallery')">Gallery</button>
-            <button class="view-btn" id="btn-info" onclick="setView('info')">Stats!</button>
+            <button class="view-btn" id="btn-info" onclick="setView('info')">Stats</button>
             <button class="view-btn" id="btn-memory" onclick="setView('memory')">Memory</button>
             <button class="view-btn" id="btn-review" onclick="setView('review')">Review</button>
         </div>
