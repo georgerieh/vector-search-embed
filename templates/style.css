@@ -453,6 +453,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative; /* Ensures correct stacking context */
 }
 
 /* ── TOOLBAR ── */
@@ -514,7 +515,7 @@ body {
   min-width: 200px;
   overflow-y: auto;
   padding: 12px;
-  background: #f0f0f0;2
+  background: #f0f0f0;
 }
 .resize-handle {
   position: absolute;

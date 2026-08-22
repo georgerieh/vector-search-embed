@@ -1206,60 +1206,63 @@ window.currentImages = [];
 window.currentView = "grid";
 
 window.setView = function (view) {
-window.currentView = view;
-["grid", "gallery", "info", "memory"].forEach((v) =>
+  window.currentView = view;
+
+  ["grid", "gallery", "info", "memory", "review"].forEach((v) => {
     document
-    .getElementById(`btn-${v}`)
-    ?.classList.toggle("active", v === view),
-);
+      .getElementById(`btn-${v}`)
+      ?.classList.toggle("active", v === view);
+  });
 
-const hasResults = window.currentImages.length > 0;
+  const hasResults = window.currentImages ? window.currentImages.length > 0 : false;
+  const fullWidthViews = ["gallery", "memory", "info", "review"];
+  const isFullWidth = fullWidthViews.includes(view);
 
-document.getElementById("results-area").style.display =
-    view === "grid" ? "flex" : "none";
-document.getElementById("map-pane").style.display =
-    view === "grid" ? "flex" : "none";
-document.getElementById("empty-state").style.display =
+  document.getElementById("results-area").style.display =
+    view === "grid" && hasResults ? "flex" : "none";
+
+  document.getElementById("map-pane").style.display =
+    view === "grid" && hasResults ? "flex" : "none";
+
+  document.getElementById("empty-state").style.display =
     view === "grid" && !hasResults ? "flex" : "none";
-document
+
+  document
     .getElementById("gallery-pane")
     .classList.toggle("active", view === "gallery");
-document.getElementById("info-pane").style.display =
-    view === "info" ? "flex" : "none";
-document.getElementById("memory-pane").style.display =
-    view === "memory" ? "flex" : "none";
-document.getElementById("review-pane").style.display =
-    view === "review" ? "flex" : "none";
-document.querySelector(".sidebar").style.display = [
-    "gallery",
-    "memory",
-    "info",
-].includes(view)
-    ? "none"
-    : "";
-document.querySelector(".main").style.marginLeft = [
-    "gallery",
-    "memory",
-    "info",
-].includes(view)
-    ? "0"
-    : "260px";
 
-if (view === "gallery" && hasResults)
+  document.getElementById("info-pane").style.display =
+    view === "info" ? "block" : "none";
+
+  document.getElementById("memory-pane").style.display =
+    view === "memory" ? "flex" : "none";
+
+  document.getElementById("review-pane").style.display =
+    view === "review" ? "flex" : "none";
+
+  document.querySelector(".sidebar").style.display = isFullWidth ? "none" : "";
+  
+  document.querySelector(".main").style.marginLeft = isFullWidth ? "0" : "320px";
+
+  if (view === "gallery" && hasResults) {
     buildGallery(window.currentImages, 1);
-if (view === "info" && !window.statsLoaded) {
-    window.statsLoaded = true;
-    loadStats();
-}
-if (view === "info") {
+  }
+
+  if (view === "info") {
+    if (!window.statsLoaded) {
+      window.statsLoaded = true;
+      loadStats();
+    }
     document.getElementById("info-pane").scrollTop = 0;
-}
-if (view === "memory") loadMemory();
-if (
-    view === "review" &&
-    !document.getElementById("review-grid").children.length
-)
+  }
+
+  if (view === "memory") {
+    loadMemory();
+  }
+
+  if (view === "review" && !document.getElementById("review-grid").children.length) {
     loadReviewBatch();
+  }
 };
 let galleryIndex = 1;
 
