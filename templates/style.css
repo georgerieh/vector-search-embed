@@ -578,6 +578,10 @@ body {
 .grid-overlay {
   position: absolute;
   inset: 0;
+}
+.grid-overlay {
+  position: absolute;
+  inset: 0;
   background: linear-gradient(160deg, rgba(0, 0, 0, 0.35) 0%, transparent 45%);
   opacity: 0;
   transition: opacity 0.18s;
@@ -585,6 +589,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  pointer-events: none;
 }
 
 .thumb-btn {
