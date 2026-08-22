@@ -1,9 +1,13 @@
 
     import { InferenceSession, Tensor, env } from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.mjs';
     import { FaceDetector, FilesetResolver } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
-
+    const loadingContainer = document.getElementById('loading-container');
     const loadingBar = document.getElementById('loading-bar');
     const loadingText = document.getElementById('loading-text');
+    if (loadingContainer) loadingContainer.style.display = 'block';
+
+    loadingText.textContent = 'Checking model cache...';
+    loadingBar.style.width = '0%';
     const btn = document.querySelector('button[name="forwardBtn"]');
     btn.disabled = true;
 
