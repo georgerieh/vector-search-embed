@@ -372,7 +372,32 @@
             processFaceImage(e.target.files[0]);
         }
     });
+    function cleanPhotoUrl(url) {
+        if (!url) return '';
 
+        let clean = decodeURIComponent(url).replace(/^\//, '');
+
+        const prefixesToRemove = [
+            'files/',
+            'thumbnail/',
+            'static/',
+            'media/georgerieh/T7/photos_from_icloud/',
+            'media/georgerieh/T7/'
+        ];
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const prefix of prefixesToRemove) {
+                if (clean.startsWith(prefix)) {
+                    clean = clean.slice(prefix.length).replace(/^\//, '');
+                    changed = true;
+                }
+            }
+        }
+
+        return clean;
+    }
     async function processFaceImage(file) {
         const loadingText = document.getElementById('face-upload-loading');
         loadingText.style.display = 'block';
@@ -497,32 +522,7 @@
         }
         const BASE_PATH = 'media/georgerieh/T7/photos_from_icloud/';
         const BASE = BASE_PATH
-        function cleanPhotoUrl(url) {
-        if (!url) return '';
-
-        let clean = decodeURIComponent(url).replace(/^\//, '');
-
-        const prefixesToRemove = [
-            'files/',
-            'thumbnail/',
-            'static/',
-            'media/georgerieh/T7/photos_from_icloud/',
-            'media/georgerieh/T7/'
-        ];
-
-        let changed = true;
-        while (changed) {
-            changed = false;
-            for (const prefix of prefixesToRemove) {
-                if (clean.startsWith(prefix)) {
-                    clean = clean.slice(prefix.length).replace(/^\//, '');
-                    changed = true;
-                }
-            }
-        }
-
-        return clean;
-    }
+        
     function updateLightbox() {
         const img = lightboxImages[lightboxIndex];
         const url = img.url.replace(/^\//, '');
