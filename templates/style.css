@@ -659,10 +659,13 @@ body {
   background-repeat: no-repeat;
   background-position: center;
   opacity: 0;
+  pointer-events: none; /* Ignore clicks on inactive photos */
   transition: opacity 0.35s ease;
 }
+
 .gallery-photo.active {
   opacity: 1;
+  pointer-events: auto; /* Allow clicks on active photo */
 }
 
 .gallery-controls {

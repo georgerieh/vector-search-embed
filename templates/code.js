@@ -645,7 +645,7 @@
                         updateGridToolbar();
                         return;
                     }
-                    openLightbox(window.currentImages, offset + i, multiple=false);
+                    openLightbox(window.currentImages, offset + i, false);
                     cell.addEventListener('contextmenu', e => {
                         e.preventDefault();
                     gridSelected.add(url);
@@ -1323,7 +1323,7 @@ images.forEach((img, i) => {
     const thumb = document.createElement("div");
     thumb.className = "strip-thumb" + (i === startIndex ? " active" : "");
     thumb.style.backgroundImage = `url('${thumbSrc}')`;
-    thumb.addEventListener("click", () => setGalleryIndex(galleryIndex));
+    thumb.addEventListener("click", () => setGalleryIndex(i));
     strip.appendChild(thumb);
 });
 
