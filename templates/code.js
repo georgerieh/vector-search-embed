@@ -2226,6 +2226,7 @@ data.photos.forEach((photo, i) => {
     cell.innerHTML = `
     <div style="width:100%;height:100%;background:url('/thumbnail/${url}') center/cover;cursor:pointer;"></div>
     <div style="position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,0,0,0.35) 0%,transparent 45%);opacity:0;transition:opacity 0.18s;padding:7px;display:flex;justify-content:flex-end;align-items:flex-start;">
+        <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
         <button class="thumb-btn thumb-delete" title="Delete">✕</button>
     </div>
 `;
