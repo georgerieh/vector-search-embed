@@ -673,7 +673,7 @@ async function processFaceImage(file) {
                     <button class="thumb-btn thumb-fav ${isFav?'fav-active':''}" title="Favorite">♥</button>
                     <button class="thumb-btn thumb-delete" title="Delete">✕</button>
                 </div>
-                <div class="grid-score">${img.score.toFixed(2)}</div>
+                /*<div class="grid-score">${img.score.toFixed(2)}</div>*/
             </div>
         `;
             cell.querySelector('.grid-thumb').addEventListener('click', e => {
@@ -1395,13 +1395,6 @@ function showFaceModal(faceEmbedding, croppedCanvas, autoClose = 10000) {
         .thumb-fav.fav-active { color: #ff3b30; }
         .thumb-delete:hover { background: rgba(255,59,48,0.5); }
 
-        .grid-score {
-            position: absolute;
-            bottom: 5px; right: 6px;
-            font-size: 10px;
-            color: rgba(255,255,255,0.6);
-            font-variant-numeric: tabular-nums;
-        }
         .map-pane {
     width: 320px;
     min-width: 200px;
