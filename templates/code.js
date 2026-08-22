@@ -681,7 +681,6 @@
             observer.observe(el);
         });
 
-        document.getElementById('result-count').textContent = `${window.currentImages.length} photos`;
     };
         window.renderResults = function(data) {
             window.currentImages = data.images;
@@ -755,7 +754,6 @@
 
             grid.querySelectorAll('.grid-thumb').forEach(el => observer.observe(el));
 
-            document.getElementById('result-count').textContent = `${data.images.length} photos`;
             document.getElementById('toolbar-info').textContent = `${data.images.length} results`;
 
             updateMap(data.images);
@@ -2377,8 +2375,6 @@ for (const url of [...gridSelected]) {
 renderFavStrip();
 updateGridToolbar();
 
-document.getElementById("result-count").textContent =
-    `${window.currentImages.length} photos`;
 document.getElementById("loading-container").style.display = "none";
 }
 
