@@ -2250,7 +2250,7 @@ window.setView = function(view) {
     if (view === 'memory') loadMemory();
     if (view === 'review' && !document.getElementById('review-grid').children.length) loadReviewBatch();
 }
-let galleryIndex = 0;
+let galleryIndex = 1;
 
 function buildGallery(images, startIndex) {
     const main = document.getElementById('gallery-main');
