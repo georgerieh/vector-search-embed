@@ -712,23 +712,41 @@ data.images.forEach((img, i) => {
     `;
 
     // Click handler: Toggle batch selection OR open Lightbox
-    cell.querySelector('.grid-thumb').addEventListener('click', e => {
-        if (e.target.closest('.thumb-btn')) return;
+    // Click handler: Toggle batch selection OR open Lightbox
+cell.querySelector('.grid-thumb').addEventListener('click', e => {
+    if (e.target.closest('.thumb-btn')) return;
 
-        if (gridSelected.size > 0 || e.shiftKey) {
-            if (gridSelected.has(url)) {
-                gridSelected.delete(url);
-                cell.classList.remove('grid-selected');
-            } else {
-                gridSelected.add(url);
-                cell.classList.add('grid-selected');
-            }
-            updateGridToolbar();
-            return;
+    // 1. Shift-click ALWAYS toggles selection state
+    if (e.shiftKey) {
+        if (gridSelected.has(url)) {
+            gridSelected.delete(url);
+            cell.classList.remove('grid-selected');
+        } else {
+            gridSelected.add(url);
+            cell.classList.add('grid-selected');
         }
+        updateGridToolbar();
+        return;
+    }
 
-        openLightbox(data.images, i, false);
-    });
+    // 2. Regular click on an ALREADY SELECTED item deselects it
+    if (gridSelected.has(url)) {
+        gridSelected.delete(url);
+        cell.classList.remove('grid-selected');
+        updateGridToolbar();
+        return;
+    }
+
+    // 3. Regular click on an UNSELECTED item clears selection mode and opens Lightbox
+    if (gridSelected.size > 0) {
+        gridSelected.clear();
+        document.querySelectorAll('.grid-selected').forEach(el => el.classList.remove('grid-selected'));
+        updateGridToolbar();
+    }
+
+    const currentIndex = window.currentImages.findIndex(item => item.url.replace(/^\//, '') === url);
+    openLightbox(window.currentImages, currentIndex !== -1 ? currentIndex : i, false);
+});
 
 
     // Favorite button handler
@@ -2221,6 +2239,7 @@ grid.innerHTML = "";
 data.photos.forEach((photo, i) => {
     const url = photo.url.replace(/^\//, "");
     const cell = document.createElement("div");
+    const isFav = favs.includes(url);
     cell.style.cssText =
     "aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;opacity:0;transform:scale(0.94);transition:opacity 0.3s ease,transform 0.3s ease;";
     cell.innerHTML = `
