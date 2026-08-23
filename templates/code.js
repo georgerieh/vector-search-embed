@@ -288,6 +288,7 @@ document
     const country = document.getElementById("country-filter").value;
     const city = document.getElementById("city-filter").value;
     const h3cell = document.getElementById("h3-filter").value;
+    const type_media = document.getElementById("type-media").value;
 
     const hasImage = fileInput.files.length > 0;
     const hasFilters = startDate || endDate || country || city || h3cell;
