@@ -82,7 +82,8 @@ function updateCombinedProgress() {
   loadingBar.style.width = display + "%";
   loadingText.textContent = `Loading AI Models... ${display}%`;
 }
-if (not isSafari) 
+
+if (!isSafari) {
 const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
   fetchWithCacheAndProgress(
     "https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx",
@@ -103,8 +104,6 @@ const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
   ),
 ]);
 
-loadingText.textContent = "Final steps...";
-loadingBar.style.width = "85%";
 
 const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
   InferenceSession.create(dinoBuffer, {
@@ -122,6 +121,11 @@ const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
     minDetectionConfidence: 0.9,
   }),
 ]);
+};
+
+loadingText.textContent = "Final steps...";
+loadingBar.style.width = "85%";
+
 
 loadingBar.style.width = "100%";
 loadingText.textContent = "✓ Ready — upload a photo to search";
