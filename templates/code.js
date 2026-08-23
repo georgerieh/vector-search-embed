@@ -847,25 +847,27 @@ window.renderResults = function (data) {
     const url = img.url.replace(/^\//, "");
     const thumbUrl = `/thumbnail/${url}`;
     const isFav = favs.includes(url);
+    const isSelected = gridSelected && gridSelected.has(url);
 
     const cell = document.createElement("div");
     cell.dataset.url = url;
-    cell.className = "grid-cell";
+    cell.className = `grid-cell ${isSelected ? "grid-selected" : ""}`;
 
     cell.innerHTML = `
-    <div class="grid-thumb" style="background-image: url('${thumbUrl}');">
-        <div class="grid-overlay">
-            <button class="thumb-btn thumb-fav ${isFav ? "fav-active" : ""}" title="Favorite">♥</button>
-            <button class="thumb-btn thumb-delete" title="Delete">✕</button>
-        </div>
-    </div>
-`;
+      <div class="grid-thumb">
+          <div class="grid-overlay">
+              <button class="thumb-btn thumb-fav ${isFav ? "fav-active" : ""}" title="Favorite">♥</button>
+              <button class="thumb-btn thumb-delete" title="Delete">✕</button>
+          </div>
+      </div>
+    `;
 
-    cell.querySelector(".grid-thumb").addEventListener("click", (e) => {
-      // 1. Ignore clicks on overlay action buttons (favorite/delete)
+    const thumbEl = cell.querySelector(".grid-thumb");
+    thumbEl.style.backgroundImage = `url(${JSON.stringify(thumbUrl)})`;
+
+    thumbEl.addEventListener("click", (e) => {
       if (e.target.closest(".thumb-btn")) return;
 
-      // 2. Select mode ONLY triggers if holding Shift (or Ctrl/Cmd)
       if (e.shiftKey || e.ctrlKey || e.metaKey) {
         if (gridSelected.has(url)) {
           gridSelected.delete(url);
@@ -875,22 +877,22 @@ window.renderResults = function (data) {
           cell.classList.add("grid-selected");
         }
         if (typeof updateGridToolbar === "function") updateGridToolbar();
-        return; // Stop here, do not open lightbox
+        return;
       }
 
       if (typeof openLightbox === "function") {
         openLightbox(window.currentImages, i, false);
+      } else {
+        console.error("openLightbox function is not defined globally.");
       }
     });
 
-    // Favorite button handler
     cell.querySelector(".thumb-fav").addEventListener("click", (e) => {
       e.stopPropagation();
       const nowFav = toggleFavorite(url);
       e.currentTarget.classList.toggle("fav-active", nowFav);
     });
 
-    // Delete button handler
     cell.querySelector(".thumb-delete").addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm("Delete this photo?")) return;
@@ -902,14 +904,14 @@ window.renderResults = function (data) {
         const res = await fetch("/delete_photo", { method: "POST", body: fd });
         if (!res.ok) throw new Error("Deletion failed");
 
-        // 1. Sync state memory
+        // Sync state memory
         window.currentImages = window.currentImages.filter(
           (item) => item.url.replace(/^\//, "") !== url,
         );
         gridSelected.delete(url);
-        updateGridToolbar();
+        if (typeof updateGridToolbar === "function") updateGridToolbar();
 
-        // 2. Animate and clean up DOM node
+        // Animate and clean up DOM node
         cell.style.opacity = "0";
         cell.style.transform = "scale(0.85)";
         setTimeout(() => cell.remove(), 300);
@@ -923,7 +925,8 @@ window.renderResults = function (data) {
 
   // Single DOM append operation for performance
   grid.appendChild(fragment);
-  // staggered appear animation
+
+  // Staggered appear animation
   requestAnimationFrame(() => {
     grid.querySelectorAll(".grid-cell").forEach((el, i) => {
       el.style.transitionDelay = `${Math.min(i * 25, 600)}ms`;
@@ -931,19 +934,26 @@ window.renderResults = function (data) {
     });
   });
 
-  grid.querySelectorAll(".grid-thumb").forEach((el) => observer.observe(el));
+  if (typeof observer !== "undefined") {
+    grid.querySelectorAll(".grid-thumb").forEach((el) => observer.observe(el));
+  }
 
-  document.getElementById("toolbar-info").textContent =
-    `${data.images.length} results`;
+  const toolbarInfo = document.getElementById("toolbar-info");
+  if (toolbarInfo) toolbarInfo.textContent = `${data.images.length} results`;
 
-  updateMap(data.images);
+  if (typeof updateMap === "function") updateMap(data.images);
 
-  document.getElementById("empty-state").style.display = "none";
+  const emptyState = document.getElementById("empty-state");
+  if (emptyState) emptyState.style.display = "none";
 
-  // if in gallery view, rebuild
-  if (window.currentView === "gallery") buildGallery(data.images, 1);
+  // If in gallery view, rebuild
+  if (window.currentView === "gallery" && typeof buildGallery === "function") {
+    buildGallery(data.images, 1);
+  }
 
-  loadFavoritesFromDisk();
+  if (typeof loadFavoritesFromDisk === "function") {
+    loadFavoritesFromDisk();
+  }
 };
 
 window.favOverlaySelected = new Set();
@@ -2352,10 +2362,11 @@ async function loadReviewBatch() {
 
   const grid = document.getElementById("review-grid");
   grid.innerHTML = "";
-
+  loadFavoritesFromDisk();
   data.photos.forEach((photo, i) => {
     const url = photo.url.replace(/^\//, "");
     const cell = document.createElement("div");
+    const favs = _favSet ? [..._favSet] : [];
     const isFav = favs.includes(url);
     cell.style.cssText =
       "aspect-ratio:1;position:relative;border-radius:4px;overflow:hidden;opacity:0;transform:scale(0.94);transition:opacity 0.3s ease,transform 0.3s ease;";
@@ -2375,7 +2386,11 @@ async function loadReviewBatch() {
     const overlay = cell.querySelector("div + div");
     cell.addEventListener("mouseenter", () => (overlay.style.opacity = "1"));
     cell.addEventListener("mouseleave", () => (overlay.style.opacity = "0"));
-
+    cell.querySelector(".thumb-fav").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nowFav = toggleFavorite(url);
+      e.currentTarget.classList.toggle("fav-active", nowFav);
+    });
     cell.querySelector(".thumb-delete").addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm("Delete this photo?")) return;
