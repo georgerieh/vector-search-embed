@@ -38,15 +38,15 @@ def _score_dino_rows(rows, dino_q, face_scores):
 
 
 def search_with_images(image, limit, embedding, start_date="", end_date="", 
-                       facenet_embedding=None, country="", city="", h3cell=""):
+                       facenet_embedding=None, country="", city="", h3cell="", type_media="all"):
     dino_features = get_image_embedding(embedding) if embedding is not None else None
     rows, stats = _search(dino_features, facenet_embedding, limit=limit,
                           start_date=start_date, end_date=end_date,
-                          country=country, city=city, h3cell=h3cell)
+                          country=country, city=city, h3cell=h3cell, type_media=type_media)
     stats["generation_time"] = 0
     return rows, stats
 
-def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=()):
+def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=(), limit=50):
     dino_q = np.array(dino_query, dtype=np.float32).tobytes()
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
 
@@ -74,11 +74,12 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
             {sql_where}
             GROUP BY p.id  
             ORDER BY total_score ASC, p.date DESC
-            LIMIT 50
+            LIMIT ?
         """
         params = (dino_q, facenet_q) + where_params
     else:
         sql = f"""
+        SELECT DISTINCT * FROM (
             SELECT p.id, p.path, p.location, p.lat, p.lon, v.distance as total_score,
                    COALESCE(p.media_type, 'photo'), p.video_path
             FROM photos p
@@ -87,13 +88,29 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
                 FROM vec_photos 
                 WHERE dino_embedding MATCH ? AND k = 50
             ) v ON p.id = v.id
-            {sql_where} 
+            {sql_where}
+            UNION ALL
+            SELECT p.id, p.path, p.location, p.lat, p.lon, v.distance as total_score,
+                               COALESCE(p.media_type, 'photo'), p.video_path
+                FROM photos p
+                JOIN (
+                    SELECT id, distance, photo_id 
+                    FROM vec_video_frames 
+                    WHERE dino_embedding MATCH ? AND k = 50
+                ) v ON p.id = v.photo_id
+                {sql_where})
             ORDER BY total_score ASC, p.date DESC
-            LIMIT 50
+            LIMIT ?
         """
+        #how to install
+        #pip install sqlite-vec --break-system-packages
+        #find ~/.local/lib/python3*/site-packages/sqlite_vec/ -name "*.so"
+        #sqlite3 photos.db
+        #.load /home/georgerieh/.local/lib/python3.13/site-packages/sqlite_vec/vec0.so
+        #DDL
         params = (dino_q,) + where_params
 
-    cursor = conn.execute(sql, params)
+    cursor = conn.execute(sql, tuple(params) + (limit,))
     rows = cursor.fetchall()
     
     seen = set()
@@ -128,11 +145,14 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
 
 
 def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
-            country="", city="", h3cell=""):
+            country="", city="", h3cell="", type_media="all"):
     conn = get_conn()
     st = time.time()
-
-    has_filters = any([start_date, country, city, h3cell])
+    if type_media != 'all':
+        has_specific_type_media = True
+    else:
+        has_specific_type_media = False
+    has_filters = any([start_date, country, city, h3cell, has_specific_type_media])
 
     if not dino_query and not has_filters:
         conn.close()
@@ -174,6 +194,11 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         placeholders = ",".join(["?"] * len(children))
         conditions.append(f"h3_cell IN ({placeholders})")
         params.extend(children)
+    if has_specific_type_media:
+        conditions.append("media_type = ?")
+        params.append(type_media)
+        
+        
 
     where_str = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     
@@ -210,7 +235,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
     else:
-        results = _vector_search(conn, dino_query, facenet_query, where_clause=where, where_params=where_params)
+        results = _vector_search(conn, dino_query, facenet_query, where_clause=where_str, where_params=params, limit=limit)
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
 
@@ -218,7 +243,7 @@ def get_image_embedding(embedding) -> list:
     return (embedding / np.linalg.norm(embedding)).tolist()
 
 
-def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None, country=None, city=None, h3cell=None):
+def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None, country=None, city=None, h3cell=None, type_media='All'):
     limit = limit if limit is not None else 50
     images, stats = [], {}
 
@@ -232,7 +257,8 @@ def return_file(search_parser, text, image, table, limit, start_date="", end_dat
             facenet_embedding=facenet_embedding,
             country=country,
             city=city, 
-            h3cell=h3cell
+            h3cell=h3cell,
+            type_media=type_media
         )
 
     return {
