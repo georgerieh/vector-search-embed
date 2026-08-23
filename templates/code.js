@@ -82,7 +82,7 @@ function updateCombinedProgress() {
   loadingBar.style.width = display + "%";
   loadingText.textContent = `Loading AI Models... ${display}%`;
 }
-if (not isSafari) {
+if (not isSafari) 
 const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
   fetchWithCacheAndProgress(
     "https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx",
@@ -102,7 +102,6 @@ const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm",
   ),
 ]);
-};
 
 loadingText.textContent = "Final steps...";
 loadingBar.style.width = "85%";
