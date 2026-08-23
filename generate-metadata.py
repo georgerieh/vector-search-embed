@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
+#the only file to run
+from generate import DB_PATH, process_images, ingest_videos, model, preprocess, BASE_PATH
 import argparse
 import json
 import os
@@ -67,7 +69,11 @@ def parse_exiftool_json(json_data, target_directory):
         location_obj, lat, lon = get_location(item)
         location_str = json.dumps(location_obj) if location_obj else ""
 
-        created_date = item.get("CreateDate", "").split(" ")[0] if "CreateDate" in item else ""
+        location, lat, lon = get_location(item)
+        raw_date = item.get("CreateDate", "")
+        created_date = (
+            raw_date.split(" ")[0].replace(":", "-") if raw_date else ""
+        )
         height = item.get("ExifImageHeight")
         width = item.get("ExifImageWidth")
         
