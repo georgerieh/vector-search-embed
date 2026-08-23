@@ -38,11 +38,11 @@ def _score_dino_rows(rows, dino_q, face_scores):
 
 
 def search_with_images(image, limit, embedding, start_date="", end_date="", 
-                       facenet_embedding=None, country="", city="", h3cell=""):
+                       facenet_embedding=None, country="", city="", h3cell="", type_media="All"):
     dino_features = get_image_embedding(embedding) if embedding is not None else None
     rows, stats = _search(dino_features, facenet_embedding, limit=limit,
                           start_date=start_date, end_date=end_date,
-                          country=country, city=city, h3cell=h3cell)
+                          country=country, city=city, h3cell=h3cell, type_media=type_media)
     stats["generation_time"] = 0
     return rows, stats
 
@@ -128,11 +128,14 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
 
 
 def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
-            country="", city="", h3cell=""):
+            country="", city="", h3cell="", type_media="All"):
     conn = get_conn()
     st = time.time()
-
-    has_filters = any([start_date, country, city, h3cell])
+    if type_media != 'All':
+        has_specific_type_media = True
+    else:
+        has_specific_type_media = False
+    has_filters = any([start_date, country, city, h3cell, has_specific_type_media])
 
     if not dino_query and not has_filters:
         conn.close()
@@ -174,6 +177,11 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         placeholders = ",".join(["?"] * len(children))
         conditions.append(f"h3_cell IN ({placeholders})")
         params.extend(children)
+    if has_specific_type_media:
+        conditions.append("media_type = ?")
+        params.append(type_media)
+        
+        
 
     where_str = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     
@@ -210,7 +218,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
     else:
-        results = _vector_search(conn, dino_query, facenet_query, where_clause=where, where_params=where_params)
+        results = _vector_search(conn, dino_query, facenet_query, where_clause=where_str, where_params=params)
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
 
@@ -218,7 +226,7 @@ def get_image_embedding(embedding) -> list:
     return (embedding / np.linalg.norm(embedding)).tolist()
 
 
-def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None, country=None, city=None, h3cell=None):
+def return_file(search_parser, text, image, table, limit, start_date="", end_date="", embedding=None, facenet_embedding=None, country=None, city=None, h3cell=None, type_media='All'):
     limit = limit if limit is not None else 50
     images, stats = [], {}
 
@@ -232,7 +240,8 @@ def return_file(search_parser, text, image, table, limit, start_date="", end_dat
             facenet_embedding=facenet_embedding,
             country=country,
             city=city, 
-            h3cell=h3cell
+            h3cell=h3cell,
+            type_media=type_media
         )
 
     return {
