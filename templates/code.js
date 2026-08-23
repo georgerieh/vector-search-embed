@@ -14,7 +14,9 @@ import {
 
 var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-
+if (isSafari) {
+    document.getElementById('file-upload-label').style.display = "none";
+}
 const loadingContainer = document.getElementById("loading-container");
 const loadingBar = document.getElementById("loading-bar");
 const loadingText = document.getElementById("loading-text");
