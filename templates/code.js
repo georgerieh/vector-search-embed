@@ -14,9 +14,7 @@ import {
 
 var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-if (isSafari) {
-    document.getElementById('file-upload-label').style.display = "none";
-}
+if (isSafari) document.getElementById('file-upload-label').style.display = "none";
 const loadingContainer = document.getElementById("loading-container");
 const loadingBar = document.getElementById("loading-bar");
 const loadingText = document.getElementById("loading-text");
@@ -104,7 +102,7 @@ const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm",
   ),
 ]);
-}
+};
 
 loadingText.textContent = "Final steps...";
 loadingBar.style.width = "85%";
