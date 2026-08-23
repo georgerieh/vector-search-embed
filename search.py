@@ -46,7 +46,7 @@ def search_with_images(image, limit, embedding, start_date="", end_date="",
     stats["generation_time"] = 0
     return rows, stats
 
-def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=()):
+def _vector_search(conn, dino_query, facenet_query, where_clause="", where_params=(), limit=50):
     dino_q = np.array(dino_query, dtype=np.float32).tobytes()
     has_face_query = facenet_query is not None and not np.all(np.array(facenet_query) == 0)
 
@@ -74,11 +74,12 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
             {sql_where}
             GROUP BY p.id  
             ORDER BY total_score ASC, p.date DESC
-            LIMIT 50
+            LIMIT ?
         """
         params = (dino_q, facenet_q) + where_params
     else:
         sql = f"""
+        SELECT DISTINCT * FROM (
             SELECT p.id, p.path, p.location, p.lat, p.lon, v.distance as total_score,
                    COALESCE(p.media_type, 'photo'), p.video_path
             FROM photos p
@@ -87,13 +88,29 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
                 FROM vec_photos 
                 WHERE dino_embedding MATCH ? AND k = 50
             ) v ON p.id = v.id
-            {sql_where} 
+            {sql_where}
+            UNION ALL
+            SELECT p.id, p.path, p.location, p.lat, p.lon, v.distance as total_score,
+                               COALESCE(p.media_type, 'photo'), p.video_path
+                FROM photos p
+                JOIN (
+                    SELECT id, distance, photo_id 
+                    FROM vec_video_frames 
+                    WHERE dino_embedding MATCH ? AND k = 50
+                ) v ON p.id = v.photo_id
+                {sql_where})
             ORDER BY total_score ASC, p.date DESC
-            LIMIT 50
+            LIMIT ?
         """
+        #how to install
+        #pip install sqlite-vec --break-system-packages
+        #find ~/.local/lib/python3*/site-packages/sqlite_vec/ -name "*.so"
+        #sqlite3 photos.db
+        #.load /home/georgerieh/.local/lib/python3.13/site-packages/sqlite_vec/vec0.so
+        #DDL
         params = (dino_q,) + where_params
 
-    cursor = conn.execute(sql, params)
+    cursor = conn.execute(sql, tuple(params) + (limit,))
     rows = cursor.fetchall()
     
     seen = set()
@@ -218,7 +235,7 @@ def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
     else:
-        results = _vector_search(conn, dino_query, facenet_query, where_clause=where_str, where_params=params)
+        results = _vector_search(conn, dino_query, facenet_query, where_clause=where_str, where_params=params, limit=limit)
         conn.close()
         return results, {"query_time": round(time.time() - st, 3)}
 

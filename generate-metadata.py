@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+#the only file to run
 from generate import DB_PATH, process_images, ingest_videos, model, preprocess, BASE_PATH
 import argparse
 import json
@@ -70,8 +71,9 @@ def parse_exiftool_json(json_data):
         file_name = path.name
 
         location, lat, lon = get_location(item)
+        raw_date = item.get("CreateDate", "")
         created_date = (
-            item.get("CreateDate", "").split(" ")[0] if "CreateDate" in item else ""
+            raw_date.split(" ")[0].replace(":", "-") if raw_date else ""
         )
         height = item.get("ExifImageHeight")
         width = item.get("ExifImageWidth")

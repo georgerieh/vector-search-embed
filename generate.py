@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+#only for libraries, do not run
 import argparse
 import json
 from pathlib import Path
@@ -443,38 +444,39 @@ def process_images(conn, append, batch_size=32):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--directory",
-        help="Path to image folder",
-        default="/Volumes/T7/photos_from_icloud",
-    )
-    parser.add_argument("--batch_size", type=int, default=32) 
-    parser.add_argument(
-        "--output", default="/Volumes/T7/photos_from_icloud-out/embeddings_new.jsonl"
-    )
-    parser.add_argument(
-        "--append", default=False
-    )
-    args = parser.parse_args()
-    append = args.append
-    base_folder = Path(args.directory)
-    output_path = Path(args.output)
-    output_path.parent.mkdir(exist_ok=True, parents=True)
-    buffer = []
-    i = 0
-    conn = sqlite3.connect(DB_PATH)
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "--directory",
+    #     help="Path to image folder",
+    #     default="/Volumes/T7/photos_from_icloud",
+    # )
+    # parser.add_argument("--batch_size", type=int, default=32) 
+    # parser.add_argument(
+    #     "--output", default="/Volumes/T7/photos_from_icloud-out/embeddings_new.jsonl"
+    # )
+    # parser.add_argument(
+    #     "--append", default=False
+    # )
+    # args = parser.parse_args()
+    # append = args.append
+    # base_folder = Path(args.directory)
+    # output_path = Path(args.output)
+    # output_path.parent.mkdir(exist_ok=True, parents=True)
+    # buffer = []
+    # i = 0
+    # conn = sqlite3.connect(DB_PATH)
 
 
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        process_images(conn, append)
-        ingest_videos(conn, append)
-        h3population()
-    finally:
-        conn.close()
+    # conn = sqlite3.connect(DB_PATH)
+    # try:
+    #     process_images(conn, append)
+    #     ingest_videos(conn, append)
+    #     h3population()
+    # finally:
+    #     conn.close()
+    pass
 
 
 
-current_time = datetime.now()
-print(current_time)
+# current_time = datetime.now()
+# print(current_time)
