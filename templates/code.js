@@ -291,7 +291,7 @@ document
     const type_media = document.getElementById("type-media").value;
 
     const hasImage = fileInput.files.length > 0;
-    const hasFilters = startDate || endDate || country || city || h3cell;
+    const hasFilters = startDate || endDate || country || city || h3cell || type_media;
 
     if (!hasImage && !hasFilters && !selectedFaceEmbedding) return;
 
@@ -412,6 +412,7 @@ document
         country,
         city,
         h3cell,
+        type_media
       }),
     });
     const reader = response.body.getReader();
