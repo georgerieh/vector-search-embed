@@ -38,7 +38,7 @@ def _score_dino_rows(rows, dino_q, face_scores):
 
 
 def search_with_images(image, limit, embedding, start_date="", end_date="", 
-                       facenet_embedding=None, country="", city="", h3cell="", type_media="All"):
+                       facenet_embedding=None, country="", city="", h3cell="", type_media="all"):
     dino_features = get_image_embedding(embedding) if embedding is not None else None
     rows, stats = _search(dino_features, facenet_embedding, limit=limit,
                           start_date=start_date, end_date=end_date,
@@ -145,10 +145,10 @@ def _vector_search(conn, dino_query, facenet_query, where_clause="", where_param
 
 
 def _search(dino_query, facenet_query, limit=50, start_date="", end_date="",
-            country="", city="", h3cell="", type_media="All"):
+            country="", city="", h3cell="", type_media="all"):
     conn = get_conn()
     st = time.time()
-    if type_media != 'All':
+    if type_media != 'all':
         has_specific_type_media = True
     else:
         has_specific_type_media = False
