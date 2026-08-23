@@ -7,6 +7,14 @@ import {
   FaceDetector,
   FilesetResolver,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
+
+// Source - https://stackoverflow.com/a/23522755
+// Posted by fregante, modified by community. See post 'Timeline' for change history
+// Retrieved 2026-08-23, License - CC BY-SA 3.0
+
+var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+
 const loadingContainer = document.getElementById("loading-container");
 const loadingBar = document.getElementById("loading-bar");
 const loadingText = document.getElementById("loading-text");
@@ -21,7 +29,6 @@ const gridSelected = window.gridSelected;
 const CACHE_NAME = "ai-models-v1";
 
 async function fetchWithCacheAndProgress(url, onProgress) {
-  if ("caches" in window) {
     const cache = await caches.open(CACHE_NAME);
 
     const cachedResponse = await cache.match(url);
@@ -31,7 +38,6 @@ async function fetchWithCacheAndProgress(url, onProgress) {
       onProgress(1.0);
       return await cachedResponse.arrayBuffer();
     }
-  }
 
   // 2. Otherwise download and stream
   const response = await fetch(url, { redirect: "follow" });
@@ -76,8 +82,7 @@ function updateCombinedProgress() {
   loadingBar.style.width = display + "%";
   loadingText.textContent = `Loading AI Models... ${display}%`;
 }
-
-// 1. Parallel download / cache retrieve
+if (not isSafari) {
 const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
   fetchWithCacheAndProgress(
     "https://huggingface.co/georgerieh/onnx-dino-vitb-16-and-facenet/resolve/main/dino_vitb16_inline.onnx",
@@ -97,8 +102,9 @@ const [dinoBuffer, facenetBuffer, vision] = await Promise.all([
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm",
   ),
 ]);
+}
 
-loadingText.textContent = "Initializing AI Hardware (WebGPU)...";
+loadingText.textContent = "Final steps...";
 loadingBar.style.width = "85%";
 
 const [dinoSession, faceNetSession, faceDetector] = await Promise.all([
